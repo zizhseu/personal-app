@@ -2,8 +2,10 @@
   <div v-if="app" class="page">
     <el-page-header class="header" @back="router.back()">
       <template #content>
-        <span class="title">{{ app.company }}{{ app.position ? ` · ${app.position}` : '' }}</span>
-        <StatusTag :status="app.status" :reject-stage="app.rejectStage" class="title-tag" />
+        <div class="head-line">
+          <span class="title">{{ app.company }}{{ app.position ? ` · ${app.position}` : '' }}</span>
+          <StatusTag :status="app.status" />
+        </div>
       </template>
     </el-page-header>
 
@@ -12,7 +14,9 @@
       <el-descriptions :column="3" border>
         <el-descriptions-item label="公司">{{ app.company }}</el-descriptions-item>
         <el-descriptions-item label="岗位">{{ app.position ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item label="渠道">{{ app.channel ?? '—' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <StatusTag :status="app.status" />
+        </el-descriptions-item>
         <el-descriptions-item label="投递链接">
           <a
             v-if="app.url"
@@ -28,7 +32,9 @@
         </el-descriptions-item>
         <el-descriptions-item label="投递日期">{{ app.applyDate ?? '—' }}</el-descriptions-item>
         <el-descriptions-item label="薪资范围">{{ app.salary ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item label="工作地点">{{ app.location ?? '—' }}</el-descriptions-item>
+        <el-descriptions-item label="Base">
+          {{ app.base?.length ? app.base.join(' / ') : '—' }}
+        </el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">
           {{ app.note || '—' }}
         </el-descriptions-item>
@@ -54,7 +60,7 @@
             :key="round.id"
             :timestamp="roundTimeText(round)"
             :type="timelineType(round.result)"
-            :hollow="round.result === 'pending'"
+            :hollow="round.result === 'not_started'"
             placement="top"
           >
             <div class="round-item">
@@ -189,12 +195,17 @@ async function confirmRemoveRound(round: InterviewRound) {
   padding: 4px 0;
 }
 
-.title {
-  font-size: 18px;
-  font-weight: 600;
-  display: inline-flex;
+.head-line {
+  display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
 /* 轮次（左）+ 状态变化（右）并列；窗口太窄时换行堆叠 */
@@ -299,6 +310,8 @@ async function confirmRemoveRound(round: InterviewRound) {
 .result-tag {
   border: none;
   color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
 }
 
 .round-actions {

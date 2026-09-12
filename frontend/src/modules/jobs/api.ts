@@ -26,6 +26,15 @@ export function patchStatus(id: number, status: Application['status']): Promise<
   return request.patch(`/jobs/applications/${id}/status`, { status }) as Promise<Application>
 }
 
+export function patchOfferDecision(
+  id: number,
+  offerDecision: 'accepted' | 'rejected_offer',
+): Promise<Application> {
+  return request.patch(`/jobs/applications/${id}/offer-decision`, {
+    offerDecision,
+  }) as Promise<Application>
+}
+
 export function deleteApplication(id: number): Promise<void> {
   return request.delete(`/jobs/applications/${id}`) as Promise<void>
 }

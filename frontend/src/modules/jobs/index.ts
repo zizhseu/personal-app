@@ -5,6 +5,7 @@ import type { AppModule } from '@/shared/types/module'
 /** jobs 模块声明：路由 + 菜单元信息（title 有值且非 hidden 的进菜单） */
 export const jobsModule: AppModule = {
   name: 'jobs',
+  label: '简历投递',
   routes: [
     { path: '/jobs', redirect: '/jobs/dashboard' },
     {
@@ -23,7 +24,7 @@ export const jobsModule: AppModule = {
       path: '/jobs/applications/:id',
       name: 'jobs-detail',
       component: () => import('./views/ApplicationDetailView.vue'),
-      meta: { hidden: true },
+      meta: { hidden: true, activeMenu: '/jobs/list' },
     },
     {
       path: '/jobs/schedule',

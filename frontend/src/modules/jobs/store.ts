@@ -42,14 +42,20 @@ export const useJobsStore = defineStore('jobs', {
       ElMessage.success('新增投递成功')
       await this.loadAll()
     },
-    async update(id: number, payload: Partial<ApplicationPayload>) {
+    /** silent = 不弹成功提示（列表内快捷编辑用） */
+    async update(id: number, payload: Partial<ApplicationPayload>, silent = false) {
       await api.updateApplication(id, payload)
-      ElMessage.success('保存成功')
+      if (!silent) ElMessage.success('保存成功')
       await this.loadAll()
     },
     async quickSetStatus(id: number, status: ApplicationStatus) {
       await api.patchStatus(id, status)
       ElMessage.success('状态已更新')
+      await this.loadAll()
+    },
+    async setOfferDecision(id: number, decision: 'accepted' | 'rejected_offer') {
+      await api.patchOfferDecision(id, decision)
+      ElMessage.success('结果已更新')
       await this.loadAll()
     },
     async remove(id: number) {

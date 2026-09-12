@@ -1,9 +1,17 @@
 <template>
   <div class="page">
+    <!-- 页头 -->
+    <div class="page-head">
+      <div>
+        <h1>看板</h1>
+        <p class="sub">投递进展与趋势，一屏掌握</p>
+      </div>
+    </div>
+
     <!-- 统计卡片行 -->
     <el-row :gutter="16">
       <el-col v-for="card in statCards" :key="card.label" :span="6">
-        <StatCard :value="card.value" :label="card.label" />
+        <StatCard :value="card.value" :label="card.label" :dot="card.dot" />
       </el-col>
     </el-row>
 
@@ -16,7 +24,7 @@
           <el-empty v-else description="暂无数据" :image-size="80" />
         </el-card>
       </el-col>
-      <el-col :span="14">
+      <el-col :span="24">
         <el-card shadow="never" class="chart-card">
           <template #header>
             <div class="chart-header">
@@ -37,13 +45,6 @@
           </template>
           <VChart v-if="trendOption" :option="trendOption" autoresize class="chart" />
           <el-empty v-else description="所选时间段内暂无投递" :image-size="80" />
-        </el-card>
-      </el-col>
-      <el-col :span="24">
-        <el-card shadow="never" class="chart-card">
-          <template #header>渠道分布</template>
-          <VChart v-if="channelOption" :option="channelOption" autoresize class="chart channel" />
-          <el-empty v-else description="暂无数据" :image-size="80" />
         </el-card>
       </el-col>
     </el-row>
@@ -100,12 +101,13 @@ const statCards = computed(() => {
   const apps = store.applications
   const weekAgo = dayjs().subtract(7, 'day')
   return [
-    { label: '投递总数', value: apps.length },
-    { label: '面试中', value: apps.filter((a) => a.status === 'interviewing').length },
-    { label: 'Offer 数', value: apps.filter((a) => a.status === 'offer').length },
+    { label: '投递总数', value: apps.length, dot: '#17181a' },
+    { label: '面试', value: apps.filter((a) => a.status === 'interviewing').length, dot: '#8b5cf6' },
+    { label: 'Offer 数', value: apps.filter((a) => a.status === 'offer').length, dot: '#15803d' },
     {
       label: '本周新增',
       value: apps.filter((a) => a.applyDate && dayjs(a.applyDate).isAfter(weekAgo)).length,
+      dot: '#e8590c',
     },
   ]
 })
@@ -190,50 +192,13 @@ const trendOption = computed(() => {
     ],
   }
 })
-
-// ---------- 渠道分布（横向条形图，全部同一色，长度已表达数量） ----------
-const channelOption = computed(() => {
-  const counts = new Map<string, number>()
-  for (const a of store.applications) {
-    const key = a.channel || '未填写'
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  if (counts.size === 0) return null
-  const sorted = [...counts.entries()].sort((x, y) => x[1] - y[1])
-  return {
-    tooltip: { trigger: 'item', formatter: '{b}：{c} 条' },
-    grid: { left: 90, right: 40, top: 8, bottom: 24 },
-    xAxis: {
-      type: 'value',
-      minInterval: 1,
-      axisLabel: { color: '#6b7280' },
-      splitLine: { lineStyle: { color: '#f3f4f6' } },
-    },
-    yAxis: {
-      type: 'category',
-      data: sorted.map(([name]) => name),
-      axisLabel: { color: '#374151' },
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#e5e7eb' } },
-    },
-    series: [
-      {
-        type: 'bar',
-        data: sorted.map(([, v]) => v),
-        barMaxWidth: 18,
-        itemStyle: { color: '#3B82F6', borderRadius: [0, 4, 4, 0] },
-        label: { show: true, position: 'right', color: '#374151' },
-      },
-    ],
-  }
-})
 </script>
 
 <style scoped>
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .charts {
@@ -261,9 +226,5 @@ const channelOption = computed(() => {
 
 .chart.pie {
   height: 300px;
-}
-
-.chart.channel {
-  height: 240px;
 }
 </style>

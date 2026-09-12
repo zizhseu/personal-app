@@ -1,13 +1,10 @@
 /** 投递状态 key（与后端 constants 一致） */
 export type ApplicationStatus =
-  | 'applied'
-  | 'viewed'
+  | 'screening'
   | 'assessment'
   | 'written_test'
   | 'interviewing'
   | 'offer'
-  | 'rejected'
-  | 'declined'
 
 /** 流程轮次类型（测评/笔试/面试等） */
 export type RoundType =
@@ -20,8 +17,15 @@ export type RoundType =
   | 'final'
   | 'other'
 
-/** 轮次结果 */
-export type RoundResult = 'pending' | 'passed' | 'failed'
+/** 轮次结果（accepted / rejected_offer 仅状态为 Offer 时使用） */
+export type RoundResult =
+  | 'not_started'
+  | 'completed'
+  | 'not_attended'
+  | 'passed'
+  | 'failed'
+  | 'accepted'
+  | 'rejected_offer'
 
 /** 流程轮次 */
 export interface InterviewRound {
@@ -53,14 +57,14 @@ export interface Application {
   id: number
   company: string
   position: string | null
-  channel: string | null
   url: string | null
   applyDate: string | null
   salary: string | null
-  location: string | null
+  /** 意向 Base 城市（多选） */
+  base: string[] | null
   status: ApplicationStatus
-  /** 挂的阶段（rejected 时后端自动推断，如 first = 一面挂） */
-  rejectStage: string | null
+  /** Offer 决定（accepted / rejected_offer），仅状态为 Offer 时有意义 */
+  offerDecision: 'accepted' | 'rejected_offer' | null
   note: string | null
   rounds: InterviewRound[]
   statusHistory: StatusHistory[]
@@ -72,11 +76,10 @@ export interface Application {
 export interface ApplicationPayload {
   company: string
   position?: string | null
-  channel?: string | null
   url?: string | null
   applyDate?: string | null
   salary?: string | null
-  location?: string | null
+  base?: string[] | null
   status?: ApplicationStatus
   note?: string | null
 }
@@ -113,5 +116,21 @@ export interface EventPayload {
   eventTime?: string | null
   location?: string | null
   note?: string | null
+  applicationId?: number | null
+}
+
+/** 日程条目（日程页内部结构：轮次与自定义日程归一后） */
+export interface ScheduleItem {
+  key: string
+  kind: 'round' | 'event'
+  /** 展示/排序时间（轮次=截止时间，日程=开始时间） */
+  scheduledAt: string
+  /** MM-DD HH:mm */
+  time: string
+  typeLabel: string
+  title: string
+  location: string | null
+  round?: InterviewRound
+  event?: ScheduleEvent
   applicationId?: number | null
 }

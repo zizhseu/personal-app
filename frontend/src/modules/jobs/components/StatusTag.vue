@@ -6,26 +6,20 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { REJECT_STAGE_LABELS, STATUS_COLORS, STATUS_LABELS } from '../constants'
+import { STATUS_COLORS, STATUS_LABELS } from '../constants'
 import type { ApplicationStatus } from '../types'
 
-const props = defineProps<{
-  status: ApplicationStatus
-  /** 挂的阶段细分（rejected 时显示「一面挂」等替代文案） */
-  rejectStage?: string | null
-}>()
+const props = defineProps<{ status: ApplicationStatus }>()
 
-const label = computed(() =>
-  props.status === 'rejected' && props.rejectStage
-    ? REJECT_STAGE_LABELS[props.rejectStage] ?? STATUS_LABELS[props.status]
-    : STATUS_LABELS[props.status],
-)
-const color = computed(() => STATUS_COLORS[props.status])
+const label = computed(() => STATUS_LABELS[props.status] ?? props.status)
+const color = computed(() => STATUS_COLORS[props.status] ?? '#94A3B8')
 </script>
 
 <style scoped>
 .status-tag {
   border: none;
   color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
 }
 </style>

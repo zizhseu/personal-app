@@ -1,7 +1,7 @@
 """投递记录与流程轮次模型。"""
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.base import Base, TimestampMixin
@@ -15,13 +15,12 @@ class Application(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     company: Mapped[str] = mapped_column(String(100))
     position: Mapped[str | None] = mapped_column(String(100))  # 岗位（选填）
-    channel: Mapped[str | None] = mapped_column(String(50))       # 招聘渠道
     url: Mapped[str | None] = mapped_column(String(500))          # 招聘页面链接（点击跳转）
     apply_date: Mapped[date | None] = mapped_column(Date)         # 投递日期
     salary: Mapped[str | None] = mapped_column(String(50))        # 薪资范围（自由文本）
-    location: Mapped[str | None] = mapped_column(String(100))     # 工作地点
-    status: Mapped[str] = mapped_column(String(20), default="applied", index=True)
-    reject_stage: Mapped[str | None] = mapped_column(String(20))  # 挂的阶段（rejected 时自动计算）
+    base: Mapped[list[str] | None] = mapped_column(JSON)          # 意向 Base 城市（多选）
+    status: Mapped[str] = mapped_column(String(20), default="screening", index=True)
+    offer_decision: Mapped[str | None] = mapped_column(String(20))  # Offer 决定：accepted / rejected_offer
     note: Mapped[str | None] = mapped_column(Text)
 
     rounds: Mapped[list["InterviewRound"]] = relationship(
@@ -47,13 +46,12 @@ class Application(Base, TimestampMixin):
             "id": self.id,
             "company": self.company,
             "position": self.position,
-            "channel": self.channel,
             "url": self.url,
             "applyDate": self.apply_date.isoformat() if self.apply_date else None,
             "salary": self.salary,
-            "location": self.location,
+            "base": self.base,
             "status": self.status,
-            "rejectStage": self.reject_stage,
+            "offerDecision": self.offer_decision,
             "note": self.note,
             "rounds": [r.to_dict() for r in ordered_rounds],
             "statusHistory": [h.to_dict() for h in ordered_history],
@@ -78,7 +76,7 @@ class InterviewRound(Base, TimestampMixin):
     start_at: Mapped[datetime | None] = mapped_column(DateTime)          # 开始时间
     duration_minutes: Mapped[int | None] = mapped_column(Integer)        # 持续分钟数
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime)      # 截止时间 = 开始 + 持续（后端计算）
-    result: Mapped[str] = mapped_column(String(20), default="pending")
+    result: Mapped[str] = mapped_column(String(20), default="not_started")
     review_note: Mapped[str | None] = mapped_column(Text)  # 面试复盘笔记
 
     application: Mapped["Application"] = relationship(back_populates="rounds")

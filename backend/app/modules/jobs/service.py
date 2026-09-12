@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.jobs.constants import ROUND_TYPE_LABELS, ROUND_TYPE_STATUS, STATUS_LABELS
+from app.modules.jobs.constants import ROUND_TYPE_LABELS, ROUND_TYPE_STATUS, STATUS_FLOW, STATUS_LABELS
 from app.modules.jobs.models import Application, InterviewRound, ScheduleEvent, StatusHistory
 from app.modules.jobs.schemas import (
     ApplicationCreate,
@@ -13,6 +13,7 @@ from app.modules.jobs.schemas import (
     ApplicationUpdate,
     EventCreate,
     EventUpdate,
+    OfferDecisionPatch,
     RoundCreate,
     RoundUpdate,
 )
@@ -21,7 +22,6 @@ from app.modules.jobs.schemas import (
 def list_applications(
     db: Session,
     status: str | None = None,
-    channel: str | None = None,
     keyword: str | None = None,
 ) -> list[Application]:
     """全量列表（含轮次、状态历史），按投递日期倒序、空日期在后。"""
@@ -31,8 +31,6 @@ def list_applications(
     )
     if status:
         stmt = stmt.where(Application.status == status)
-    if channel:
-        stmt = stmt.where(Application.channel == channel)
     if keyword:
         like = f"%{keyword}%"
         stmt = stmt.where(Application.company.like(like) | Application.position.like(like))
@@ -55,24 +53,19 @@ def get_application(db: Session, app_id: int) -> Application:
     return app_row
 
 
-def _reject_stage(prev_status: str, rounds: list[InterviewRound]) -> str:
-    """根据挂之前的状态推断挂在哪个阶段：
-    测评前挂 → 简历挂；测评 → 测评挂；笔试 → 笔试挂；
-    面试中 → 按最新的面试轮次细分（一面挂/二面挂/…），无轮次则兜底「面试挂」。
+def _sync_rounds_on_status_change(row: Application, old_status: str, new_status: str) -> None:
+    """状态正向推进时，把当前最新轮次置为「通过」（进入了下一环节 = 上一环节通过）。
+    边界：倒退/平移不联动；「未通过」是用户录入的事实不覆盖；无轮次静默跳过。
+    下一环节的新轮次默认「未开始」（前后端默认值），无需在此处理。
     """
-    if prev_status == "assessment":
-        return "assessment"
-    if prev_status == "written_test":
-        return "written_test"
-    if prev_status == "interviewing":
-        interview_types = ("first", "second", "third", "hr", "final")
-        latest = max(
-            (r for r in rounds if r.round_type in interview_types),
-            key=lambda r: r.id,
-            default=None,
-        )
-        return latest.round_type if latest else "interview"
-    return "resume"
+    if old_status not in STATUS_FLOW or new_status not in STATUS_FLOW:
+        return
+    if STATUS_FLOW.index(new_status) <= STATUS_FLOW.index(old_status):
+        return
+    if row.rounds:
+        latest = max(row.rounds, key=lambda r: r.id)
+        if latest.result in ("not_started", "completed", "not_attended"):
+            latest.result = "passed"
 
 
 def create_application(db: Session, data: ApplicationCreate) -> Application:
@@ -89,16 +82,11 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
     row = get_application(db, app_id)
     updates = data.model_dump(exclude_unset=True)
     new_status = updates.get("status")
-    status_changed = new_status is not None and new_status != row.status
-    if status_changed:
-        # 挂了 → 记录挂的阶段；离开挂了 → 清空
-        if new_status == "rejected":
-            updates["reject_stage"] = _reject_stage(row.status, row.rounds)
-        else:
-            updates["reject_stage"] = None
+    old_status = row.status  # 先取旧状态（setattr 会覆盖）
     for key, value in updates.items():
         setattr(row, key, value)
-    if status_changed:
+    if new_status is not None and new_status != old_status:
+        _sync_rounds_on_status_change(row, old_status, new_status)
         row.status_history.append(StatusHistory(status=new_status))
     db.commit()
     db.refresh(row)
@@ -108,15 +96,23 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
 def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Application:
     row = get_application(db, app_id)
     if row.status != data.status:
-        # 挂了 → 记录挂的阶段；离开挂了 → 清空
-        if data.status == "rejected":
-            row.reject_stage = _reject_stage(row.status, row.rounds)
-        else:
-            row.reject_stage = None
+        _sync_rounds_on_status_change(row, row.status, data.status)
         row.status = data.status
         row.status_history.append(StatusHistory(status=data.status))
         db.commit()
         db.refresh(row)
+    return row
+
+
+def patch_offer_decision(
+    db: Session, app_id: int, data: OfferDecisionPatch
+) -> Application:
+    row = get_application(db, app_id)
+    if row.status != "offer":
+        raise HTTPException(status_code=422, detail="仅状态为「Offer」时可设置接受 / 拒绝")
+    row.offer_decision = data.offer_decision
+    db.commit()
+    db.refresh(row)
     return row
 
 

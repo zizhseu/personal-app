@@ -40,12 +40,7 @@
       </el-form-item>
       <el-form-item label="结果">
         <el-select v-model="form.result" style="width: 100%">
-          <el-option
-            v-for="(label, key) in RESULT_LABELS"
-            :key="key"
-            :label="label"
-            :value="key"
-          />
+          <el-option v-for="r in resultOptions" :key="r" :label="RESULT_LABELS[r]" :value="r" />
         </el-select>
       </el-form-item>
       <el-form-item label="复盘笔记">
@@ -68,8 +63,14 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import type { InterviewRound, RoundPayload, RoundType } from '../types'
-import { ROUND_TYPE_LABELS, RESULT_LABELS, ROUND_TYPE_STATUS } from '../constants'
+import type { InterviewRound, RoundPayload, RoundResult, RoundType } from '../types'
+import {
+  ROUND_TYPE_LABELS,
+  RESULT_LABELS,
+  ROUND_TYPE_STATUS,
+  NORMAL_RESULT_OPTIONS,
+  OFFER_RESULT_OPTIONS,
+} from '../constants'
 import { useJobsStore } from '../store'
 
 const props = defineProps<{
@@ -101,6 +102,14 @@ const allowedTypes = computed<RoundType[]>(() => {
   return allowed
 })
 
+/** 当前状态下可选的结果（Offer 态仅接受 / 拒绝；编辑时保留原结果可见） */
+const resultOptions = computed<RoundResult[]>(() => {
+  const opts = [...(app.value?.status === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
+  const cur = props.round?.result
+  if (cur && !opts.includes(cur)) opts.push(cur)
+  return opts
+})
+
 const nowStr = () => dayjs().format('YYYY-MM-DDTHH:mm:ss')
 const DEFAULT_DURATION_MINUTES = 72 * 60 // 默认持续 72 小时
 
@@ -108,7 +117,7 @@ const emptyForm = (): RoundPayload => ({
   roundType: 'first',
   startAt: nowStr(), // 开始时间默认此刻
   durationMinutes: DEFAULT_DURATION_MINUTES,
-  result: 'pending',
+  result: 'not_started',
   reviewNote: null,
 })
 
@@ -137,7 +146,7 @@ watch(visible, (v) => {
       // 老数据只有「计划时间」：回填为开始时间
       startAt: r?.startAt ?? r?.scheduledAt ?? (r ? null : nowStr()),
       durationMinutes: r ? (r.durationMinutes ?? null) : DEFAULT_DURATION_MINUTES,
-      result: r?.result ?? 'pending',
+      result: r?.result ?? 'not_started',
       reviewNote: r?.reviewNote ?? null,
     })
   }

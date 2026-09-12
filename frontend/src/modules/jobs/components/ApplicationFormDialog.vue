@@ -12,11 +12,6 @@
       <el-form-item label="岗位" prop="position">
         <el-input v-model="form.position" placeholder="岗位名称（选填）" />
       </el-form-item>
-      <el-form-item label="招聘渠道">
-        <el-select v-model="form.channel" placeholder="选择渠道" filterable clearable style="width: 100%">
-          <el-option v-for="c in CHANNELS" :key="c" :label="c" :value="c" />
-        </el-select>
-      </el-form-item>
       <el-form-item label="投递链接">
         <el-input v-model="form.url" placeholder="招聘页面 / JD 链接（选填，如 https://...）">
           <template #append>
@@ -36,8 +31,20 @@
       <el-form-item label="薪资范围">
         <el-input v-model="form.salary" placeholder="如 20k-30k·14薪" />
       </el-form-item>
-      <el-form-item label="工作地点">
-        <el-input v-model="form.location" placeholder="如 北京 / 上海" />
+      <el-form-item label="Base">
+        <el-select
+          v-model="form.base"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="意向城市（可多选，可直接输入任意城市）"
+          style="width: 100%"
+        >
+          <el-option v-for="c in BASE_OPTIONS" :key="c" :label="c" :value="c" />
+        </el-select>
       </el-form-item>
       <el-form-item label="当前状态">
         <el-select v-model="form.status" style="width: 100%">
@@ -64,7 +71,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { Application, ApplicationPayload, ApplicationStatus } from '../types'
-import { STATUS_LABELS, STATUS_ORDER, CHANNELS } from '../constants'
+import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS } from '../constants'
 import { today } from '@/shared/utils/format'
 import { useJobsStore } from '../store'
 
@@ -82,12 +89,11 @@ const isEdit = computed(() => !!props.application?.id)
 const emptyForm = (): ApplicationPayload => ({
   company: '',
   position: null,
-  channel: null,
   url: null,
   applyDate: today(), // 投递日期默认当天
   salary: null,
-  location: null,
-  status: 'applied',
+  base: [],
+  status: 'screening',
   note: null,
 })
 
@@ -100,13 +106,12 @@ watch(visible, (v) => {
     Object.assign(form, emptyForm(), {
       company: a?.company ?? '',
       position: a?.position ?? null,
-      channel: a?.channel ?? null,
       url: a?.url ?? null,
       // 新增时默认当天；编辑时保留原值
       applyDate: a?.applyDate ?? (a ? null : today()),
       salary: a?.salary ?? null,
-      location: a?.location ?? null,
-      status: a?.status ?? 'applied',
+      base: a?.base ?? [],
+      status: a?.status ?? 'screening',
       note: a?.note ?? null,
     })
   }
@@ -121,11 +126,12 @@ async function save() {
   if (!ok) return
   saving.value = true
   try {
-    // 岗位空值归一为 null；链接去掉首尾空格
+    // 岗位空值归一为 null；链接去掉首尾空格；Base 空数组归一为 null
     const payload: ApplicationPayload = {
       ...form,
       position: form.position?.trim() || null,
       url: form.url?.trim() || null,
+      base: form.base?.length ? form.base : null,
     }
     if (isEdit.value) {
       await store.update(props.application!.id, payload)

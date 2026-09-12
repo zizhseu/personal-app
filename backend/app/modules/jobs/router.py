@@ -10,6 +10,7 @@ from app.modules.jobs.schemas import (
     ApplicationUpdate,
     EventCreate,
     EventUpdate,
+    OfferDecisionPatch,
     RoundCreate,
     RoundUpdate,
 )
@@ -20,12 +21,11 @@ router = APIRouter(prefix="/api/jobs", tags=["秋招投递"])
 @router.get("/applications")
 def list_applications(
     status: str | None = None,
-    channel: str | None = None,
     keyword: str | None = None,
     db: Session = Depends(get_db),
 ):
-    """全量投递列表（含轮次），支持状态/渠道/关键字筛选。"""
-    rows = service.list_applications(db, status=status, channel=channel, keyword=keyword)
+    """全量投递列表（含轮次），支持状态/关键字筛选。"""
+    rows = service.list_applications(db, status=status, keyword=keyword)
     return [r.to_dict() for r in rows]
 
 
@@ -47,6 +47,12 @@ def update_application(app_id: int, data: ApplicationUpdate, db: Session = Depen
 @router.patch("/applications/{app_id}/status")
 def patch_status(app_id: int, data: ApplicationStatusPatch, db: Session = Depends(get_db)):
     return service.patch_status(db, app_id, data).to_dict()
+
+
+@router.patch("/applications/{app_id}/offer-decision")
+def patch_offer_decision(app_id: int, data: OfferDecisionPatch, db: Session = Depends(get_db)):
+    """Offer 决定（接受 / 拒绝），仅状态为 Offer 时可设置。"""
+    return service.patch_offer_decision(db, app_id, data).to_dict()
 
 
 @router.delete("/applications/{app_id}")
