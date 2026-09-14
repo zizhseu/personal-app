@@ -77,6 +77,7 @@ class InterviewRound(Base, TimestampMixin):
     duration_minutes: Mapped[int | None] = mapped_column(Integer)        # 持续分钟数
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime)      # 截止时间 = 开始 + 持续（后端计算）
     result: Mapped[str] = mapped_column(String(20), default="not_started")
+    result_changed_at: Mapped[datetime | None] = mapped_column(DateTime)  # 结果最后一次被修改的时间
     review_note: Mapped[str | None] = mapped_column(Text)  # 面试复盘笔记
 
     application: Mapped["Application"] = relationship(back_populates="rounds")
@@ -90,6 +91,7 @@ class InterviewRound(Base, TimestampMixin):
             "durationMinutes": self.duration_minutes,
             "scheduledAt": self.scheduled_at.isoformat() if self.scheduled_at else None,
             "result": self.result,
+            "resultChangedAt": self.result_changed_at.isoformat() if self.result_changed_at else None,
             "reviewNote": self.review_note,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,

@@ -16,6 +16,7 @@
       title="待办"
       empty-text="暂无待办事项，点击右上角「新增日程」添加宣讲会等安排"
       :items="todoItems"
+      colored
       @open="openItem"
       @edit-event="openEditEvent"
       @remove-event="confirmRemoveEvent"
@@ -77,11 +78,17 @@ const roundItems = computed<ScheduleItem[]>(() => {
     for (const round of app.rounds) {
       const when = round.scheduledAt ?? round.startAt
       if (when) {
+        // 已有结果的轮次显示实际完成时间，否则显示截止时间
+        const displayTime =
+          round.result !== 'not_started' && round.resultChangedAt
+            ? round.resultChangedAt
+            : when
         items.push({
           key: `round-${round.id}`,
           kind: 'round',
           scheduledAt: when,
-          time: dayjs(when).format('MM-DD HH:mm'),
+          doneAt: round.result !== 'not_started' ? round.resultChangedAt : null,
+          time: dayjs(displayTime).format('MM-DD HH:mm'),
           typeLabel: ROUND_TYPE_LABELS[round.roundType],
           title: `${app.company}${app.position ? ` · ${app.position}` : ''}`,
           location: null,
@@ -100,6 +107,7 @@ const eventItems = computed<ScheduleItem[]>(() =>
     key: `event-${e.id}`,
     kind: 'event' as const,
     scheduledAt: e.eventTime,
+    doneAt: null,
     time: dayjs(e.eventTime).format('MM-DD HH:mm'),
     typeLabel: EVENT_TYPE_LABELS[e.eventType],
     title: e.title,
@@ -123,14 +131,16 @@ const todoItems = computed<ScheduleItem[]>(() => {
   return [...rounds, ...events].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))
 })
 
-/** 已办：已出结果 / 已完成的轮次 + 已过时间的日程，最近的在前 */
+/** 已办：已出结果 / 已完成的轮次 + 已过时间的日程，按实际完成时间最近的在前 */
 const doneItems = computed<ScheduleItem[]>(() => {
   const start = todayStart()
   const rounds = roundItems.value.filter((i) => DONE_RESULTS.includes(i.round!.result))
   const events = eventItems.value.filter(
     (i) => !dayjs(i.scheduledAt).isAfter(start.subtract(1, 'ms')),
   )
-  return [...rounds, ...events].sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt))
+  return [...rounds, ...events].sort((a, b) =>
+    (b.doneAt ?? b.scheduledAt).localeCompare(a.doneAt ?? a.scheduledAt),
+  )
 })
 
 /** 过期：截止已过还没开始（已完成的不算过期），最近的在前 */

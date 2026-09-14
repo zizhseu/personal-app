@@ -150,11 +150,14 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     payload = data.model_dump()
     start_at = payload.pop("start_at")
     duration_minutes = payload.pop("duration_minutes")
+    # 创建时若结果已不再是「未开始」，记录结果变更时间
+    result_changed_at = datetime.now() if payload.get("result", "not_started") != "not_started" else None
     row = InterviewRound(
         application_id=app_id,
         start_at=start_at,
         duration_minutes=duration_minutes,
         scheduled_at=_deadline(start_at, duration_minutes),
+        result_changed_at=result_changed_at,
         **payload,
     )
     db.add(row)
@@ -184,6 +187,9 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
             updates.get("start_at", row.start_at),
             updates.get("duration_minutes", row.duration_minutes),
         )
+    # 结果被修改时记录时间
+    if "result" in updates and updates["result"] != row.result:
+        updates["result_changed_at"] = datetime.now()
     for key, value in updates.items():
         setattr(row, key, value)
     db.commit()

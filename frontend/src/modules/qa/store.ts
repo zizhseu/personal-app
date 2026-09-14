@@ -50,9 +50,10 @@ export const useQaStore = defineStore('qa', {
       await this.loadAll()
       return item
     },
-    async update(id: number, payload: Partial<QaPayload>) {
+    /** silent = 不弹成功提示（索引页快捷编辑用） */
+    async update(id: number, payload: Partial<QaPayload>, silent = false) {
       await api.updateItem(id, payload)
-      ElMessage.success('保存成功')
+      if (!silent) ElMessage.success('保存成功')
       await this.loadAll()
     },
     /** 切换掌握状态：静默（标签变化即反馈，复习时高频操作不打扰） */

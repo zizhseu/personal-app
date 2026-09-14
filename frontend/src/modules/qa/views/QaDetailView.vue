@@ -21,18 +21,6 @@
           :rows="16"
           placeholder="## 考点&#10;- 要点一&#10;- 要点二&#10;&#10;\`\`\`sql&#10;SELECT ...&#10;\`\`\`"
         />
-        <div class="form-label margin-top">标签</div>
-        <el-select
-          v-model="draftTags"
-          multiple
-          filterable
-          allow-create
-          default-first-option
-          collapse-tags
-          collapse-tags-tooltip
-          placeholder="输入或选择标签，回车确认（如 agent、rag）"
-          style="width: 100%"
-        />
         <div class="edit-actions">
           <el-button @click="cancelEdit">取消</el-button>
           <el-button type="primary" :loading="saving" @click="save">保存</el-button>
@@ -84,12 +72,42 @@
           </div>
           <div class="tags-row">
             <span class="tags-label">标签</span>
-            <template v-if="item!.tags?.length">
-              <el-tag v-for="t in item!.tags" :key="t" size="small" effect="plain" class="mini-tag">
-                {{ t }}
-              </el-tag>
-            </template>
-            <span v-else class="tags-empty">无标签</span>
+            <span class="tags-wrap">
+              <template v-if="item!.tags?.length">
+                <el-tag v-for="t in item!.tags" :key="t" size="small" effect="plain" class="mini-tag">
+                  {{ t }}
+                </el-tag>
+              </template>
+              <span v-else class="tags-empty">无标签</span>
+            </span>
+            <!-- 点击 + 直接打标签：勾选当前分类已有 / 输入新建 -->
+            <el-popover placement="bottom-end" :width="230" trigger="click">
+              <template #reference>
+                <el-icon
+                  class="add-tag-btn"
+                  role="button"
+                  aria-label="编辑标签"
+                  title="编辑标签"
+                  @click.stop
+                >
+                  <Plus />
+                </el-icon>
+              </template>
+              <el-checkbox-group v-model="itemTags" @change="saveTags">
+                <div class="tag-pick-list">
+                  <el-checkbox v-for="t in allTags" :key="t" :value="t">{{ t }}</el-checkbox>
+                </div>
+              </el-checkbox-group>
+              <div class="tag-add">
+                <el-input
+                  v-model="newTag"
+                  size="small"
+                  placeholder="新标签，回车添加"
+                  @keyup.enter="addTag"
+                />
+                <el-button size="small" type="primary" plain @click="addTag">添加</el-button>
+              </div>
+            </el-popover>
           </div>
         </el-card>
       </template>
@@ -128,24 +146,49 @@ const catName = computed(
 
 const editing = ref(isNew.value)
 const draft = reactive({ question: '', answer: '' })
-const draftTags = ref<string[]>([])
 const saving = ref(false)
+
+/** 标签（查看态浮层直接编辑，双向代理到当前题目） */
+const newTag = ref('')
+const itemTags = computed({
+  get: () => item.value?.tags ?? [],
+  set: (v) => {
+    if (item.value) item.value.tags = v
+  },
+})
+
+async function saveTags() {
+  if (!item.value) return
+  await store.update(item.value.id, { tags: itemTags.value }, true)
+}
+
+function addTag() {
+  const tag = newTag.value.trim()
+  if (!tag) return
+  if (!itemTags.value.includes(tag)) {
+    itemTags.value = [...itemTags.value, tag]
+    void saveTags()
+  }
+  newTag.value = ''
+}
 
 // 路由变化时重置编辑状态（详情间切换 / 新建 → 详情）
 watch(
   () => route.fullPath,
   () => {
     editing.value = isNew.value
-    draftTags.value = isNew.value ? [] : [...(item.value?.tags ?? [])]
   },
 )
 
-/** 全部出现过的标签（编辑下拉候选） */
-const allTags = computed(() =>
-  [...new Set(store.items.flatMap((i) => i.tags ?? []))].sort((a, b) =>
+/** 标签候选 = 当前分类出现过的标签 + 该题已有标签（编辑下拉候选） */
+const allTags = computed(() => {
+  const fromCat = store.items
+    .filter((i) => i.categoryId === currentCatId.value)
+    .flatMap((i) => i.tags ?? [])
+  return [...new Set([...fromCat, ...(item.value?.tags ?? [])])].sort((a, b) =>
     a.localeCompare(b, 'zh'),
-  ),
-)
+  )
+})
 
 // 进入某题详情即视为阅读，更新最后阅读时间
 // immediate：从索引点进详情时 id 一开始就有值（无"变化"），必须立即执行一次
@@ -168,7 +211,6 @@ function goBack() {
 function startEdit() {
   draft.question = item.value!.question
   draft.answer = item.value!.answer ?? ''
-  draftTags.value = [...(item.value!.tags ?? [])]
   editing.value = true
 }
 
@@ -184,13 +226,10 @@ async function save() {
   }
   saving.value = true
   try {
+    // 标签走查看态浮层独立保存，此处只更新问题与答案
     const payload = {
       question: draft.question.trim(),
       answer: draft.answer.trim() || null,
-      // 去空格、去重、去空项；空数组归一为 null
-      tags: draftTags.value.length
-        ? [...new Set(draftTags.value.map((t) => t.trim()).filter(Boolean))]
-        : null,
     }
     if (isNew.value) {
       const created = await store.create({ categoryId: routeCategoryId.value, ...payload })
@@ -399,15 +438,58 @@ async function confirmRemove() {
   flex-shrink: 0;
 }
 
+.tags-wrap {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .tags-empty {
   font-size: 12.5px;
   color: var(--ink-3);
+}
+
+.add-tag-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.add-tag-btn:hover {
+  color: var(--el-color-primary);
+  background: #f1f2f4;
+}
+
+.tag-pick-list {
+  max-height: 190px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.tag-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-soft);
 }
 
 .mini-tag {
   color: var(--ink-2);
   background: #f2f2f3;
   border-color: transparent;
+  flex-shrink: 0;
 }
 
 .spacer {

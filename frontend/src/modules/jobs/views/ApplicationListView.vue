@@ -128,7 +128,15 @@
           </el-dropdown>
         </template>
       </el-table-column>
-      <el-table-column label="结果" width="110">
+      <el-table-column
+        label="结果"
+        width="110"
+        column-key="result"
+        :filters="resultFilters"
+        :filter-method="filterResultMethod"
+        :filtered-value="resultFilter"
+        filter-placement="bottom-end"
+      >
         <template #default="{ row }">
           <!-- 可点击下拉：非 Offer 态改最新轮次结果；Offer 态改接受 / 拒绝 -->
           <el-dropdown
@@ -214,6 +222,13 @@ const keyword = ref('')
 const statusFilter = ref<ApplicationStatus[]>([])
 const statusFilters = STATUS_ORDER.map((s) => ({ text: STATUS_LABELS[s], value: s }))
 
+/** 表头结果筛选（选项 = 全部结果枚举） */
+const resultFilter = ref<RoundResult[]>([])
+const resultFilters = (Object.keys(RESULT_LABELS) as RoundResult[]).map((r) => ({
+  text: RESULT_LABELS[r],
+  value: r,
+}))
+
 /** 排序与分页（EP 内置排序只作用于当前页，故在数据层接管） */
 const PAGE_SIZE = 10
 const page = ref(1)
@@ -257,6 +272,13 @@ const filtered = computed(() => {
   }
   if (statusFilter.value.length) {
     list = list.filter((a) => statusFilter.value.includes(a.status))
+  }
+  if (resultFilter.value.length) {
+    list = list.filter((a) => {
+      // 按「结果列显示的值」筛选：Offer 态看 Offer 决定，其余看最新轮次结果
+      const disp = a.status === 'offer' ? a.offerDecision : latestRound(a)?.result ?? null
+      return disp !== null && resultFilter.value.includes(disp)
+    })
   }
   return list
 })
@@ -316,14 +338,19 @@ function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'des
   page.value = 1
 }
 
-function onFilterChange(f: Record<string, ApplicationStatus[]>) {
-  statusFilter.value = f.status ?? []
+function onFilterChange(f: Record<string, ApplicationStatus[] | RoundResult[]>) {
+  if ('status' in f) statusFilter.value = (f.status as ApplicationStatus[]) ?? []
+  if ('result' in f) resultFilter.value = (f.result as RoundResult[]) ?? []
   page.value = 1
 }
 
 /** EP 侧过滤与数据层过滤同条件，幂等 */
 function filterStatusMethod(value: ApplicationStatus, row: ListRow) {
   return row.status === value
+}
+
+function filterResultMethod(value: RoundResult, row: ListRow) {
+  return currentResult(row) === value
 }
 
 // 搜索 / 筛选变化回第一页；数据增删后页码夹紧

@@ -4,7 +4,27 @@
       <template #content>
         <div class="head-line">
           <span class="title">{{ app.company }}{{ app.position ? ` · ${app.position}` : '' }}</span>
-          <StatusTag :status="app.status" />
+          <el-dropdown
+            trigger="click"
+            @command="(s: ApplicationStatus) => store.quickSetStatus(app.id, s)"
+          >
+            <span class="status-trigger" title="点击修改状态">
+              <StatusTag :status="app.status" />
+              <el-icon class="caret"><CaretBottom /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="s in STATUS_ORDER"
+                  :key="s"
+                  :command="s"
+                  :disabled="s === app.status"
+                >
+                  {{ STATUS_LABELS[s] }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </template>
     </el-page-header>
@@ -128,10 +148,10 @@ import { ElMessageBox } from 'element-plus'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import RoundFormDialog from '../components/RoundFormDialog.vue'
-import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS } from '../constants'
+import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS, STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { formatDateTime } from '@/shared/utils/format'
 import { useJobsStore } from '../store'
-import type { InterviewRound } from '../types'
+import type { ApplicationStatus, InterviewRound } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -199,6 +219,18 @@ async function confirmRemoveRound(round: InterviewRound) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.status-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.caret {
+  color: var(--ink-3);
+  font-size: 12px;
 }
 
 .title {

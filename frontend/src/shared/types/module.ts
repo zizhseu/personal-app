@@ -34,4 +34,6 @@ export interface AppModule {
   creatable?: boolean
   /** + 号点击回调（模块自行实现新建交互） */
   onCreate?: () => void
+  /** 是否在侧栏/顶部生成分组（默认 true；全局设置类模块设为 false，入口自置于布局） */
+  sidebar?: boolean
 }

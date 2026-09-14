@@ -15,7 +15,7 @@
           v-for="item in paged"
           :key="item.key"
           class="item-card"
-          :class="{ expired: danger }"
+          :class="[{ expired: danger }, urgencyClass(item)]"
           @click="emit('open', item)"
         >
           <span class="time num" :class="{ 'time-danger': danger }">{{ item.time }}</span>
@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import dayjs from 'dayjs'
 import type { ScheduleEvent, ScheduleItem } from '../types'
 import { useJobsStore } from '../store'
 
@@ -67,6 +68,8 @@ const props = defineProps<{
   items: ScheduleItem[]
   /** 过期容器：警示样式 */
   danger?: boolean
+  /** 待办容器：按截止紧急度变色（红/黄/绿） */
+  colored?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -83,6 +86,15 @@ const page = ref(1)
 const paged = computed(() =>
   props.items.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
 )
+
+/** 待办紧急度：<24h 红 / <48h 黄 / 其他绿 */
+function urgencyClass(item: ScheduleItem): string {
+  if (!props.colored) return ''
+  const hours = dayjs(item.scheduledAt).diff(dayjs(), 'hour', true)
+  if (hours <= 24) return 'urgent'
+  if (hours <= 48) return 'soon'
+  return 'safe'
+}
 
 // 数据变化后页码夹紧
 watch(
@@ -161,6 +173,34 @@ function relAppName(item: ScheduleItem): string | null {
 
 .item-card.expired:hover {
   background: #fdeeea;
+}
+
+/* 待办紧急度：一天内红、两天内黄、大于两天绿 */
+.item-card.urgent {
+  background: #fef2f2;
+  border-left: 3px solid #dc2626;
+}
+
+.item-card.soon {
+  background: #fffbeb;
+  border-left: 3px solid #d97706;
+}
+
+.item-card.safe {
+  background: #f0fdf4;
+  border-left: 3px solid #16a34a;
+}
+
+.item-card.urgent:hover {
+  background: #fde8e8;
+}
+
+.item-card.soon:hover {
+  background: #fdf3d8;
+}
+
+.item-card.safe:hover {
+  background: #dcfce7;
 }
 
 .time {

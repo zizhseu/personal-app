@@ -13,6 +13,7 @@ APPLICATION_STATUSES = (
 ROUND_TYPES = (
     "assessment",     # 测评
     "written_test",   # 笔试
+    "ai",             # AI面试
     "first",          # 一面
     "second",         # 二面
     "third",          # 三面
@@ -56,6 +57,7 @@ STATUS_LABELS = {
 ROUND_TYPE_LABELS = {
     "assessment": "测评",
     "written_test": "笔试",
+    "ai": "AI面试",
     "first": "一面",
     "second": "二面",
     "third": "三面",

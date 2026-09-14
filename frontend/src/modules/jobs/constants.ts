@@ -35,6 +35,7 @@ export const STATUS_ORDER: ApplicationStatus[] = [
 export const ROUND_TYPE_STATUS: Record<RoundType, ApplicationStatus | null> = {
   assessment: 'assessment',
   written_test: 'written_test',
+  ai: 'interviewing',
   first: 'interviewing',
   second: 'interviewing',
   third: 'interviewing',
@@ -75,6 +76,7 @@ export const BASE_OPTIONS: string[] = [
 export const ROUND_TYPE_LABELS: Record<RoundType, string> = {
   assessment: '测评',
   written_test: '笔试',
+  ai: 'AI面试',
   first: '一面',
   second: '二面',
   third: '三面',

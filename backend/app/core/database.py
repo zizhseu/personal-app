@@ -84,6 +84,12 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE qa_item ADD COLUMN last_read_at DATETIME"))
             conn.commit()
 
+        # interview_round 补 result_changed_at（结果修改时间）
+        round_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(interview_round)"))]
+        if round_cols and "result_changed_at" not in round_cols:
+            conn.execute(text("ALTER TABLE interview_round ADD COLUMN result_changed_at DATETIME"))
+            conn.commit()
+
         # 分类实体化迁移：qa_item 补 category_id 列 + 初始化内置分类 + 按旧字符串回填
         if qa_cols and "category_id" not in qa_cols:
             conn.execute(text("ALTER TABLE qa_item ADD COLUMN category_id INTEGER"))

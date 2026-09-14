@@ -10,6 +10,7 @@ export type ApplicationStatus =
 export type RoundType =
   | 'assessment'
   | 'written_test'
+  | 'ai'
   | 'first'
   | 'second'
   | 'third'
@@ -37,6 +38,8 @@ export interface InterviewRound {
   /** 截止时间 = 开始时间 + 持续时间（后端自动计算） */
   scheduledAt: string | null
   result: RoundResult
+  /** 结果最后一次被修改的时间（= 实际完成时间） */
+  resultChangedAt: string | null
   reviewNote: string | null
   createdAt: string
   updatedAt: string
@@ -125,6 +128,8 @@ export interface ScheduleItem {
   kind: 'round' | 'event'
   /** 展示/排序时间（轮次=截止时间，日程=开始时间） */
   scheduledAt: string
+  /** 已完成的轮次：实际完成时间（= 结果最后一次修改时间），无则为 null */
+  doneAt: string | null
   /** MM-DD HH:mm */
   time: string
   typeLabel: string

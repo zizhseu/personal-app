@@ -62,7 +62,17 @@
           </router-link>
           <div v-if="g.items.length === 0" class="group-empty">筹备中，敬请期待</div>
         </div>
-        <div class="sidebar-foot">秋招加油 💪</div>
+        <div class="sidebar-foot">
+          <router-link
+            to="/settings"
+            class="foot-settings"
+            :class="{ active: route.path === '/settings' }"
+          >
+            <el-icon><Setting /></el-icon>
+            <span>设置</span>
+          </router-link>
+          <span>秋招加油 💪</span>
+        </div>
       </aside>
       <el-main class="main">
         <router-view />
@@ -89,9 +99,11 @@ onMounted(() => {
   void qaStore.ensureLoaded() // qa 分类菜单
 })
 
-/** 侧栏分组 = 模块 → { 显示名, 菜单项 }；模块提供 menu() 时用动态菜单（如 qa 分类） */
+/** 侧栏分组 = 模块 → { 显示名, 菜单项 }；模块提供 menu() 时用动态菜单（如 qa 分类）；sidebar: false 的模块不生成分组 */
 const groups = computed(() =>
-  modules.map((m) => ({
+  modules
+    .filter((m) => m.sidebar !== false)
+    .map((m) => ({
     key: m.name,
     label: m.label ?? m.name,
     creatable: !!m.creatable,
@@ -334,6 +346,35 @@ const campaignDays = computed(() => {
   padding: 0 10px;
   font-size: 12px;
   color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.foot-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  margin-left: -8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.foot-settings:hover {
+  background: #f1f2f4;
+  color: var(--ink);
+}
+
+.foot-settings.active {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
 }
 
 /* ---------- 主区 ---------- */

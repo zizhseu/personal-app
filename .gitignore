@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 backend/data/app.db
+backend/.env
 
 # Node
 node_modules/
