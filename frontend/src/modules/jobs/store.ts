@@ -78,6 +78,18 @@ export const useJobsStore = defineStore('jobs', {
       ElMessage.success('已删除轮次')
       await this.loadAll()
     },
+    /** 手动删除一条状态变化记录（详情页目录） */
+    async removeStatusHistory(historyId: number) {
+      await api.deleteStatusHistory(historyId)
+      ElMessage.success('已删除该条状态记录')
+      await this.loadAll()
+    },
+    /** 手动删除一条结果变化记录 */
+    async removeResultHistory(historyId: number) {
+      await api.deleteResultHistory(historyId)
+      ElMessage.success('已删除该条结果记录')
+      await this.loadAll()
+    },
     async addEvent(payload: EventPayload) {
       await api.createEvent(payload)
       ElMessage.success('已添加日程')

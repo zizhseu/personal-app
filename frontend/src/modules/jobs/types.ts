@@ -1,8 +1,7 @@
-/** 投递状态 key（与后端 constants 一致） */
+/** 投递状态 key（与后端 constants 一致；rescreen = 复筛，含测评/笔试/AI 面试） */
 export type ApplicationStatus =
   | 'screening'
-  | 'assessment'
-  | 'written_test'
+  | 'rescreen'
   | 'interviewing'
   | 'offer'
 
@@ -55,6 +54,20 @@ export interface StatusHistory {
   updatedAt: string
 }
 
+/** 轮次结果变化记录（每次结果变更自动追加；创建即有结果时 fromResult 为空） */
+export interface RoundResultChange {
+  id: number
+  roundId: number
+  /** 变化发生时的投递状态（归属到状态变化的哪一条） */
+  status: ApplicationStatus
+  roundType: string
+  fromResult: RoundResult | null
+  toResult: RoundResult
+  changedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** 投递记录（内嵌轮次数组与状态历史） */
 export interface Application {
   id: number
@@ -71,6 +84,8 @@ export interface Application {
   note: string | null
   rounds: InterviewRound[]
   statusHistory: StatusHistory[]
+  /** 轮次结果变化历史（按时间升序） */
+  resultHistory: RoundResultChange[]
   createdAt: string
   updatedAt: string
 }

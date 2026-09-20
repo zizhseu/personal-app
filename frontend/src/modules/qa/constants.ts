@@ -11,3 +11,8 @@ export const QA_STATUS_COLORS: Record<QaStatus, string> = {
   learning: '#D97706',
   mastered: '#15803D',
 }
+
+/** 标签统一显示顺序（同一组标签在所有页面渲染一致，存储保留用户输入顺序） */
+export function sortTags(tags: string[] | null | undefined): string[] {
+  return [...(tags ?? [])].sort((a, b) => a.localeCompare(b, 'zh'))
+}

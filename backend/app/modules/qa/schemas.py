@@ -34,6 +34,7 @@ class QaItemUpdate(CamelModel):
     question: str | None = None
     answer: str | None = None
     tags: list[str] | None = None
+    related_ids: list[int] | None = None  # 手动相关题目（有向：我指向的 id 列表）
     status: Literal[QA_STATUSES] | None = None
 
 

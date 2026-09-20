@@ -1,12 +1,13 @@
 import type { ApplicationStatus, EventType, RoundResult, RoundType } from './types'
 
-/** 状态 → 中文标签（rejected/declined 为废弃状态，仅老数据展示兼容） */
+/** 状态 → 中文标签（assessment/written_test/rejected/declined 为废弃状态，仅老数据展示兼容） */
 export const STATUS_LABELS: Record<ApplicationStatus, string> & Record<string, string> = {
   screening: '初筛',
-  assessment: '测评',
-  written_test: '笔试',
+  rescreen: '复筛',
   interviewing: '面试',
   offer: 'Offer',
+  assessment: '测评',
+  written_test: '笔试',
   rejected: '挂了',
   declined: '已拒绝',
 }
@@ -14,10 +15,11 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> & Record<string, s
 /** 状态 → 颜色（标签与图表共用同一色板；绿/橙/红加深以通过色盲模拟区分度校验） */
 export const STATUS_COLORS: Record<ApplicationStatus, string> & Record<string, string> = {
   screening: '#3B82F6',
-  assessment: '#0D9488',
-  written_test: '#D97706',
+  rescreen: '#D97706',
   interviewing: '#8B5CF6',
   offer: '#15803D',
+  assessment: '#0D9488',
+  written_test: '#D97706',
   rejected: '#DC2626',
   declined: '#6B7280',
 }
@@ -25,23 +27,23 @@ export const STATUS_COLORS: Record<ApplicationStatus, string> & Record<string, s
 /** 状态列表（保持流转顺序） */
 export const STATUS_ORDER: ApplicationStatus[] = [
   'screening',
-  'assessment',
-  'written_test',
+  'rescreen',
   'interviewing',
   'offer',
 ]
 
-/** 轮次类型 → 要求的投递状态（null = 不限）；硬约束：状态没到位不能加对应轮次 */
+/** 轮次类型 → 要求的投递状态（null = 不限）；硬约束：状态没到位不能加对应轮次。
+ *  复筛（rescreen）覆盖 测评 / 笔试 / AI 面试 / 其他，各家顺序不固定可来回切换 */
 export const ROUND_TYPE_STATUS: Record<RoundType, ApplicationStatus | null> = {
-  assessment: 'assessment',
-  written_test: 'written_test',
-  ai: 'interviewing',
+  assessment: 'rescreen',
+  written_test: 'rescreen',
+  ai: 'rescreen',
   first: 'interviewing',
   second: 'interviewing',
   third: 'interviewing',
   hr: 'interviewing',
   final: 'interviewing',
-  other: null,
+  other: 'rescreen',
 }
 
 /** 招聘渠道固定选项（单选） */
@@ -90,7 +92,7 @@ export const RESULT_LABELS: Record<RoundResult, string> = {
   not_started: '未开始',
   completed: '已完成',
   not_attended: '未参加',
-  passed: '通过',
+  passed: '已通过',
   failed: '未通过',
   accepted: '接受',
   rejected_offer: '拒绝',

@@ -18,6 +18,8 @@ export interface QaItem {
   answer: string | null
   /** 自定义标签（多选） */
   tags: string[] | null
+  /** 手动相关题目（有向：我指向的题目 id） */
+  relatedIds: number[] | null
   status: QaStatus
   /** 最后阅读时间（进入详情页时更新） */
   lastReadAt: string | null
@@ -31,4 +33,5 @@ export interface QaPayload {
   question: string
   answer?: string | null
   tags?: string[] | null
+  relatedIds?: number[] | null
 }

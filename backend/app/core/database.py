@@ -83,6 +83,12 @@ def init_db() -> None:
         if qa_cols and "last_read_at" not in qa_cols:
             conn.execute(text("ALTER TABLE qa_item ADD COLUMN last_read_at DATETIME"))
             conn.commit()
+        if qa_cols and "related" in qa_cols and "related_ids" not in qa_cols:
+            conn.execute(text("ALTER TABLE qa_item RENAME COLUMN related TO related_ids"))
+            conn.commit()
+        elif qa_cols and "related_ids" not in qa_cols:
+            conn.execute(text("ALTER TABLE qa_item ADD COLUMN related_ids JSON"))
+            conn.commit()
 
         # interview_round 补 result_changed_at（结果修改时间）
         round_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(interview_round)"))]
@@ -198,4 +204,89 @@ def init_db() -> None:
             {"now": now_local},
         )
         conn.execute(text("UPDATE interview_round SET result = 'not_started' WHERE result = 'pending'"))
+        conn.commit()
+
+        # 结果历史回填：历史表为空时，把既有轮次的结果与其最后修改时间补录为初始记录
+        # （状态取该投递当前状态，无法精确还原历史状态；仅历史表为空时执行一次，幂等）
+        if conn.execute(text("SELECT COUNT(*) FROM round_result_history")).scalar() == 0:
+            rows = conn.execute(
+                text(
+                    "SELECT r.id, r.application_id, r.result, r.result_changed_at, a.status "
+                    "FROM interview_round r JOIN application a ON a.id = r.application_id "
+                    "WHERE r.result_changed_at IS NOT NULL"
+                )
+            ).all()
+            for rid, aid, result, changed_at, app_status in rows:
+                conn.execute(
+                    text(
+                        "INSERT INTO round_result_history "
+                        "(round_id, application_id, status, from_result, to_result, changed_at, created_at, updated_at) "
+                        "VALUES (:r, :a, :s, NULL, :to, :at, :at, :at)"
+                    ),
+                    {"r": rid, "a": aid, "s": app_status, "to": result, "at": changed_at},
+                )
+            if rows:
+                conn.commit()
+
+        # 时区修正：SQLite 的 CURRENT_TIMESTAMP（func.now()）为 UTC，历史上由 server_default
+        # 生成的 created_at/updated_at/changed_at 均为 UTC 时间，统一 +8h 修正为本地时间。
+        # 一次性执行（标记表防重跑）；结果历史的回填行已是本地时间（ISO 带 T 格式），跳过。
+        conn.execute(
+            text("CREATE TABLE IF NOT EXISTS _migration_flags (name TEXT PRIMARY KEY)")
+        )
+        if (
+            conn.execute(
+                text("SELECT COUNT(*) FROM _migration_flags WHERE name = 'tz_local_20260915'")
+            ).scalar()
+            == 0
+        ):
+            for col in ("created_at", "updated_at"):
+                for table in (
+                    "application",
+                    "interview_round",
+                    "schedule_event",
+                    "qa_item",
+                    "qa_category",
+                ):
+                    conn.execute(
+                        text(f"UPDATE {table} SET {col} = datetime({col}, '+8 hours')")
+                    )
+            for col in ("changed_at", "created_at", "updated_at"):
+                conn.execute(
+                    text(f"UPDATE status_history SET {col} = datetime({col}, '+8 hours')")
+                )
+                conn.execute(
+                    text(
+                        f"UPDATE round_result_history SET {col} = datetime({col}, '+8 hours') "
+                        f"WHERE {col} NOT LIKE '%T%'"
+                    )
+                )
+            conn.execute(
+                text("INSERT INTO _migration_flags (name) VALUES ('tz_local_20260915')")
+            )
+            conn.commit()
+
+        # 状态合并：测评 / 笔试 → 复筛（rescreen）。各家测评/笔试/AI 面试顺序不固定，
+        # 统一归类为「复筛」，位于初筛与面试之间（轮次类型仍区分 测评/笔试/AI 面试/其他）
+        conn.execute(
+            text(
+                "UPDATE application SET status = 'rescreen' "
+                "WHERE status IN ('assessment', 'written_test')"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE status_history SET status = 'rescreen' "
+                "WHERE status IN ('assessment', 'written_test')"
+            )
+        )
+        if "round_result_history" in [
+            row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+        ]:
+            conn.execute(
+                text(
+                    "UPDATE round_result_history SET status = 'rescreen' "
+                    "WHERE status IN ('assessment', 'written_test')"
+                )
+            )
         conn.commit()

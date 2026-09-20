@@ -6,7 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.jobs.constants import ROUND_TYPE_LABELS, ROUND_TYPE_STATUS, STATUS_FLOW, STATUS_LABELS
-from app.modules.jobs.models import Application, InterviewRound, ScheduleEvent, StatusHistory
+from app.modules.jobs.models import (
+    Application,
+    InterviewRound,
+    RoundResultHistory,
+    ScheduleEvent,
+    StatusHistory,
+)
 from app.modules.jobs.schemas import (
     ApplicationCreate,
     ApplicationStatusPatch,
@@ -28,6 +34,7 @@ def list_applications(
     stmt = select(Application).options(
         joinedload(Application.rounds),
         joinedload(Application.status_history),
+        joinedload(Application.round_result_history),
     )
     if status:
         stmt = stmt.where(Application.status == status)
@@ -44,6 +51,7 @@ def get_application(db: Session, app_id: int) -> Application:
         .options(
             joinedload(Application.rounds),
             joinedload(Application.status_history),
+            joinedload(Application.round_result_history),
         )
         .where(Application.id == app_id)
     )
@@ -53,7 +61,9 @@ def get_application(db: Session, app_id: int) -> Application:
     return app_row
 
 
-def _sync_rounds_on_status_change(row: Application, old_status: str, new_status: str) -> None:
+def _sync_rounds_on_status_change(
+    db: Session, row: Application, old_status: str, new_status: str
+) -> None:
     """状态正向推进时，把当前最新轮次置为「通过」（进入了下一环节 = 上一环节通过）。
     边界：倒退/平移不联动；「未通过」是用户录入的事实不覆盖；无轮次静默跳过。
     下一环节的新轮次默认「未开始」（前后端默认值），无需在此处理。
@@ -65,7 +75,17 @@ def _sync_rounds_on_status_change(row: Application, old_status: str, new_status:
     if row.rounds:
         latest = max(row.rounds, key=lambda r: r.id)
         if latest.result in ("not_started", "completed", "not_attended"):
+            old = latest.result
             latest.result = "passed"
+            db.add(
+                RoundResultHistory(
+                    round_id=latest.id,
+                    application_id=row.id,
+                    status=new_status,  # 联动发生时状态正在推进，归属新状态
+                    from_result=old,
+                    to_result="passed",
+                )
+            )
 
 
 def create_application(db: Session, data: ApplicationCreate) -> Application:
@@ -86,7 +106,7 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
     for key, value in updates.items():
         setattr(row, key, value)
     if new_status is not None and new_status != old_status:
-        _sync_rounds_on_status_change(row, old_status, new_status)
+        _sync_rounds_on_status_change(db, row, old_status, new_status)
         row.status_history.append(StatusHistory(status=new_status))
     db.commit()
     db.refresh(row)
@@ -96,7 +116,7 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
 def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Application:
     row = get_application(db, app_id)
     if row.status != data.status:
-        _sync_rounds_on_status_change(row, row.status, data.status)
+        _sync_rounds_on_status_change(db, row, row.status, data.status)
         row.status = data.status
         row.status_history.append(StatusHistory(status=data.status))
         db.commit()
@@ -161,6 +181,18 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
         **payload,
     )
     db.add(row)
+    db.flush()  # 先取 row.id 供结果历史引用
+    # 创建即有结果：记一条初始结果变化（from 为空）
+    if result_changed_at is not None:
+        db.add(
+            RoundResultHistory(
+                round_id=row.id,
+                application_id=app_id,
+                status=app_row.status,
+                from_result=None,
+                to_result=row.result,
+            )
+        )
     db.commit()
     db.refresh(row)
     return row
@@ -187,11 +219,22 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
             updates.get("start_at", row.start_at),
             updates.get("duration_minutes", row.duration_minutes),
         )
-    # 结果被修改时记录时间
-    if "result" in updates and updates["result"] != row.result:
-        updates["result_changed_at"] = datetime.now()
+    # 结果被修改时：打点最后修改时间 + 追加变化历史
+    new_result = updates.get("result")
+    old_result = row.result
     for key, value in updates.items():
         setattr(row, key, value)
+    if new_result is not None and new_result != old_result:
+        row.result_changed_at = datetime.now()
+        db.add(
+            RoundResultHistory(
+                round_id=row.id,
+                application_id=row.application_id,
+                status=app_row.status if app_row is not None else "",
+                from_result=old_result,
+                to_result=new_result,
+            )
+        )
     db.commit()
     db.refresh(row)
     return row
@@ -199,6 +242,24 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
 
 def delete_round(db: Session, round_id: int) -> None:
     row = get_round(db, round_id)
+    db.delete(row)
+    db.commit()
+
+
+def delete_status_history(db: Session, history_id: int) -> None:
+    """手动删除一条状态变化记录（不影响投递当前状态）。"""
+    row = db.get(StatusHistory, history_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    db.delete(row)
+    db.commit()
+
+
+def delete_result_history(db: Session, history_id: int) -> None:
+    """手动删除一条结果变化记录（不影响轮次当前结果）。"""
+    row = db.get(RoundResultHistory, history_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
     db.delete(row)
     db.commit()
 

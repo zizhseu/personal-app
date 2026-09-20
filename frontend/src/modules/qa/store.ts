@@ -10,6 +10,8 @@ export const useQaStore = defineStore('qa', {
     items: [] as QaItem[],
     loaded: false,
     loading: false,
+    /** 列表页码记忆：从详情返回列表时回到离开时的页 */
+    listPage: 1,
   }),
   actions: {
     async loadAll() {

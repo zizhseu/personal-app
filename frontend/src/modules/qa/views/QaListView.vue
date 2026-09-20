@@ -162,7 +162,7 @@
             </div>
             <div class="qa-tags">
               <span class="tags-wrap">
-                <el-tag v-for="t in item.tags ?? []" :key="t" size="small" effect="plain" class="mini-tag">
+                <el-tag v-for="t in sortTags(item.tags)" :key="t" size="small" effect="plain" class="mini-tag">
                   {{ t }}
                 </el-tag>
                 <span v-if="!item.tags?.length" class="no-tags">无标签</span>
@@ -248,7 +248,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QA_STATUS_LABELS, QA_STATUS_COLORS } from '../constants'
+import { QA_STATUS_LABELS, QA_STATUS_COLORS, sortTags } from '../constants'
 import { parseQaMarkdown, type ParsedQa } from '../importer'
 import * as api from '../api'
 import { useQaStore } from '../store'
@@ -435,9 +435,13 @@ async function confirmImport() {
   }
 }
 
-/** 索引分页：每页 5 条 */
+/** 索引分页：每页 5 条；页码存 store，从详情返回时回到离开时的页 */
 const PAGE_SIZE = 5
-const page = ref(1)
+const page = ref(store.listPage)
+
+watch(page, (v) => {
+  store.listPage = v
+})
 
 /** 全部出现过的标签（限定当前分类，去重排序） */
 const allTags = computed(() =>
@@ -659,8 +663,8 @@ function goCreate() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* 固定 5 条容量：不足一页时也占位，分页条位置不随条数漂移 */
-  min-height: calc(76px * 5 + 8px * 4);
+  /* 固定 5 条容量（卡片实际 106px：问题/摘要/标签三行），不满一页也占位，分页条不漂移 */
+  min-height: calc(106px * 5 + 8px * 4);
 }
 
 .qa-card {

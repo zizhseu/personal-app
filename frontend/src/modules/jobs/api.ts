@@ -63,6 +63,14 @@ export function deleteRound(roundId: number): Promise<void> {
   return request.delete(`/jobs/rounds/${roundId}`) as Promise<void>
 }
 
+export function deleteStatusHistory(historyId: number): Promise<void> {
+  return request.delete(`/jobs/status-history/${historyId}`) as Promise<void>
+}
+
+export function deleteResultHistory(historyId: number): Promise<void> {
+  return request.delete(`/jobs/result-history/${historyId}`) as Promise<void>
+}
+
 export function fetchEvents(): Promise<ScheduleEvent[]> {
   return request.get('/jobs/events') as Promise<ScheduleEvent[]>
 }

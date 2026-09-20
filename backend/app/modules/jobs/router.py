@@ -77,6 +77,20 @@ def delete_round(round_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.delete("/status-history/{history_id}")
+def delete_status_history(history_id: int, db: Session = Depends(get_db)):
+    """手动删除一条状态变化记录。"""
+    service.delete_status_history(db, history_id)
+    return {"ok": True}
+
+
+@router.delete("/result-history/{history_id}")
+def delete_result_history(history_id: int, db: Session = Depends(get_db)):
+    """手动删除一条结果变化记录。"""
+    service.delete_result_history(db, history_id)
+    return {"ok": True}
+
+
 @router.get("/events")
 def list_events(db: Session = Depends(get_db)):
     """全量自定义日程，按时间升序。"""

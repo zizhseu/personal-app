@@ -2,9 +2,8 @@
 
 # 投递状态
 APPLICATION_STATUSES = (
-    "screening",      # 初筛（原投递中+已查看合并）
-    "assessment",     # 测评
-    "written_test",   # 笔试
+    "screening",      # 初筛
+    "rescreen",       # 复筛（测评 / 笔试 / AI 面试，各家顺序不固定，统一归此状态）
     "interviewing",   # 面试
     "offer",          # Offer
 )
@@ -40,15 +39,16 @@ EVENT_TYPES = (
 )
 
 # 状态流转顺序（正向推进联动轮次结果用）
-STATUS_FLOW = ("screening", "assessment", "written_test", "interviewing", "offer")
+STATUS_FLOW = ("screening", "rescreen", "interviewing", "offer")
 
-# 状态中文标签（报错文案用；rejected/declined 为废弃状态，仅老数据展示兼容）
+# 状态中文标签（报错文案用；assessment/written_test/rejected/declined 为废弃状态，仅老数据展示兼容）
 STATUS_LABELS = {
     "screening": "初筛",
-    "assessment": "测评",
-    "written_test": "笔试",
+    "rescreen": "复筛",
     "interviewing": "面试",
     "offer": "Offer",
+    "assessment": "测评",
+    "written_test": "笔试",
     "rejected": "挂了",
     "declined": "已拒绝",
 }
@@ -67,13 +67,15 @@ ROUND_TYPE_LABELS = {
 }
 
 # 轮次类型 → 要求的投递状态（None = 不限）；硬约束：状态没到位不能加对应轮次
+# 复筛状态覆盖 测评 / 笔试 / AI 面试 / 其他（各家顺序不固定，可来回切换）
 ROUND_TYPE_STATUS = {
-    "assessment": "assessment",
-    "written_test": "written_test",
+    "assessment": "rescreen",
+    "written_test": "rescreen",
+    "ai": "rescreen",
     "first": "interviewing",
     "second": "interviewing",
     "third": "interviewing",
     "hr": "interviewing",
     "final": "interviewing",
-    "other": None,
+    "other": "rescreen",
 }

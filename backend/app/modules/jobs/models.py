@@ -1,7 +1,7 @@
 """投递记录与流程轮次模型。"""
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.base import Base, TimestampMixin
@@ -32,6 +32,10 @@ class Application(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+    round_result_history: Mapped[list["RoundResultHistory"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+
     def to_dict(self) -> dict:
         # 有时间的按时间升序在前，空时间排最后
         ordered_rounds = sorted(
@@ -40,6 +44,10 @@ class Application(Base, TimestampMixin):
         )
         ordered_history = sorted(
             self.status_history,
+            key=lambda h: (h.changed_at is None, h.changed_at or datetime.min),
+        )
+        ordered_result_history = sorted(
+            self.round_result_history,
             key=lambda h: (h.changed_at is None, h.changed_at or datetime.min),
         )
         return {
@@ -55,6 +63,7 @@ class Application(Base, TimestampMixin):
             "note": self.note,
             "rounds": [r.to_dict() for r in ordered_rounds],
             "statusHistory": [h.to_dict() for h in ordered_history],
+            "resultHistory": [h.to_dict() for h in ordered_result_history],
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -137,13 +146,47 @@ class StatusHistory(Base, TimestampMixin):
         ForeignKey("application.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(20))
-    changed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "applicationId": self.application_id,
             "status": self.status,
+            "changedAt": self.changed_at.isoformat() if self.changed_at else None,
+            "createdAt": self.created_at.isoformat() if self.created_at else None,
+            "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class RoundResultHistory(Base, TimestampMixin):
+    """轮次结果变化记录（每次结果变更追加一行，含状态联动置通过、创建时初始结果）。"""
+
+    __tablename__ = "round_result_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    round_id: Mapped[int] = mapped_column(
+        ForeignKey("interview_round.id", ondelete="CASCADE"), index=True
+    )
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("application.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(20))  # 变化发生时的投递状态（归属用）
+    from_result: Mapped[str | None] = mapped_column(String(20))  # 创建时初始结果为 None
+    to_result: Mapped[str] = mapped_column(String(20))
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    round: Mapped["InterviewRound"] = relationship()  # 用于输出轮次类型
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "roundId": self.round_id,
+            "applicationId": self.application_id,
+            "status": self.status,
+            "roundType": self.round.round_type,
+            "fromResult": self.from_result,
+            "toResult": self.to_result,
             "changedAt": self.changed_at.isoformat() if self.changed_at else None,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,

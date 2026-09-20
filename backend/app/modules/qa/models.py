@@ -38,6 +38,7 @@ class QaItem(Base, TimestampMixin):
     tags: Mapped[list[str] | None] = mapped_column(JSON)           # 自定义标签（多选）
     status: Mapped[str] = mapped_column(String(20), default="learning")  # 掌握状态
     last_read_at: Mapped[datetime | None] = mapped_column(DateTime)      # 最后阅读时间
+    related_ids: Mapped[list[int] | None] = mapped_column(JSON)    # 手动相关题目（有向：我指向的 id 列表）
     # 旧分类字符串列（已废弃，仅保留历史数据）
 
     category_rel: Mapped["QaCategory"] = relationship()
@@ -50,6 +51,7 @@ class QaItem(Base, TimestampMixin):
             "question": self.question,
             "answer": self.answer,
             "tags": self.tags,
+            "relatedIds": self.related_ids,
             "status": self.status,
             "lastReadAt": self.last_read_at.isoformat() if self.last_read_at else None,
             "createdAt": self.created_at.isoformat() if self.created_at else None,

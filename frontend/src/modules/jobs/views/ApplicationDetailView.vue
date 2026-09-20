@@ -104,6 +104,9 @@
                   </el-button>
                 </span>
               </div>
+              <div v-if="round.resultChangedAt" class="round-result-time">
+                结果更新于 {{ formatDateTime(round.resultChangedAt) }}
+              </div>
               <div v-if="round.reviewNote" class="round-note">{{ round.reviewNote }}</div>
               <div v-else class="round-note empty">暂无复盘笔记</div>
             </div>
@@ -124,9 +127,49 @@
           </div>
         </template>
         <div class="history-list">
-          <div v-for="h in app.statusHistory" :key="h.id" class="history-row">
-            <StatusTag :status="h.status" />
-            <span class="history-time">{{ formatDateTime(h.changedAt) }}</span>
+          <div v-for="h in app.statusHistory" :key="h.id" class="history-group">
+            <!-- 一级：状态变化（目录行，有结果变化时可展开） -->
+            <div
+              class="history-row"
+              :class="{ expandable: resultChangesOf(h).length > 0, open: expandedHistory.has(h.id) }"
+              @click="toggleHistory(h, resultChangesOf(h).length)"
+            >
+              <span class="caret-slot">
+                <el-icon
+                  v-if="resultChangesOf(h).length"
+                  class="expand-caret"
+                  :class="{ open: expandedHistory.has(h.id) }"
+                >
+                  <CaretRight />
+                </el-icon>
+              </span>
+              <StatusTag :status="h.status" />
+              <span class="spacer" />
+              <span class="history-time">{{ formatDateTime(h.changedAt) }}</span>
+              <el-icon class="row-remove" title="删除此条状态记录" @click.stop="removeStatusRow(h)">
+                <Close />
+              </el-icon>
+            </div>
+            <!-- 二级目录：该状态期间发生的轮次结果变化 -->
+            <div v-if="expandedHistory.has(h.id)" class="result-changes">
+              <div v-for="rc in resultChangesOf(h)" :key="rc.id" class="result-change-row">
+                <span class="rc-round">{{ ROUND_TYPE_LABELS[rc.roundType] }}</span>
+                <el-tag
+                  size="small"
+                  effect="dark"
+                  disable-transitions
+                  class="rc-tag"
+                  :color="RESULT_COLORS[rc.toResult]"
+                >
+                  {{ RESULT_LABELS[rc.toResult] }}
+                </el-tag>
+                <span class="spacer" />
+                <span class="rc-time">{{ formatShortDateTime(rc.changedAt) }}</span>
+                <el-icon class="row-remove" title="删除此条结果记录" @click="removeResultRow(rc)">
+                  <Close />
+                </el-icon>
+              </div>
+            </div>
           </div>
         </div>
       </el-card>
@@ -145,13 +188,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
+import { ArrowRight, CaretRight, Close } from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import RoundFormDialog from '../components/RoundFormDialog.vue'
 import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS, STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { formatDateTime } from '@/shared/utils/format'
 import { useJobsStore } from '../store'
-import type { ApplicationStatus, InterviewRound } from '../types'
+import type { ApplicationStatus, InterviewRound, RoundResultChange, StatusHistory } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,6 +237,56 @@ function openAddRound() {
 function openEditRound(round: InterviewRound) {
   editingRound.value = round
   roundVisible.value = true
+}
+
+/** 短格式时间（二级内容空间紧凑用） */
+function formatShortDateTime(value?: string | null): string {
+  return value ? dayjs(value).format('MM-DD HH:mm') : '—'
+}
+
+/** 展开的结果变化目录（状态变化 id 集合，重建赋值保证响应性） */
+const expandedHistory = ref(new Set<number>())
+
+function toggleHistory(h: StatusHistory, count: number) {
+  if (count === 0) return
+  const next = new Set(expandedHistory.value)
+  if (next.has(h.id)) next.delete(h.id)
+  else next.add(h.id)
+  expandedHistory.value = next
+}
+
+/**
+ * 结果变化 → 状态行的归属：打点时已记录当时状态，取「同状态且时间不晚于该变化」的
+ * 最近一条状态行（同状态回退时归最近一次进入该状态的段；同秒也不歧义）。
+ */
+const resultChangesByRow = computed(() => {
+  const history = app.value?.statusHistory ?? []
+  const map = new Map<number, RoundResultChange[]>()
+  for (const rc of app.value?.resultHistory ?? []) {
+    const candidates = history.filter(
+      (h) => h.status === rc.status && h.changedAt <= rc.changedAt,
+    )
+    if (!candidates.length) continue
+    const target = candidates.reduce((a, b) => (b.changedAt > a.changedAt ? b : a))
+    const list = map.get(target.id) ?? []
+    list.push(rc)
+    map.set(target.id, list)
+  }
+  return map
+})
+
+function resultChangesOf(h: StatusHistory): RoundResultChange[] {
+  return resultChangesByRow.value.get(h.id) ?? []
+}
+
+/** 手动删除一条状态变化记录（不影响投递当前状态） */
+async function removeStatusRow(h: StatusHistory) {
+  await store.removeStatusHistory(h.id)
+}
+
+/** 手动删除一条结果变化记录（不影响轮次当前结果） */
+async function removeResultRow(rc: RoundResultChange) {
+  await store.removeResultHistory(rc.id)
 }
 
 async function confirmRemoveRound(round: InterviewRound) {
@@ -256,11 +351,11 @@ async function confirmRemoveRound(round: InterviewRound) {
 
 .rounds-card {
   flex: 1;
-  min-width: 560px;
+  min-width: 480px;
 }
 
 .history-card {
-  width: 320px;
+  width: 420px;
   flex-shrink: 0;
 }
 
@@ -303,26 +398,109 @@ async function confirmRemoveRound(round: InterviewRound) {
 }
 
 .history-row {
-  /* 状态列固定宽、时间列跟随：两列各自垂直对齐 */
-  display: grid;
-  grid-template-columns: 88px 1fr;
+  /* 弹性布局：箭头位固定宽 + 状态标签 + 撑开 + 时间右对齐，各级垂直对齐 */
+  display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 0;
+  border-radius: 6px;
+}
+
+.caret-slot {
+  width: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.history-row.expandable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.history-row.expandable:hover {
+  background: #f7f8fa;
 }
 
 .history-row :deep(.el-tag) {
-  justify-self: start;
+  flex-shrink: 0;
 }
 
-.history-row + .history-row {
+.history-group + .history-group .history-row {
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .history-time {
+  margin-left: auto;
   color: #6b7280;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.expand-caret {
+  font-size: 12px;
+  color: #9ca3af;
+  transition: transform 0.15s ease;
+}
+
+.expand-caret.open {
+  transform: rotate(90deg);
+}
+
+/* 二级目录：该状态期间发生的轮次结果变化（树状层级线） */
+.result-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 8px;
+  padding: 2px 0 10px 18px;
+  border-left: 2px solid #e8eaed;
+}
+
+.result-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 0;
+}
+
+.rc-round {
+  color: #6b7280;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.rc-tag {
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.rc-time {
+  color: #9ca3af;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 一级 / 二级目录条目的手动删除按钮（常显） */
+.row-remove {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.row-remove:hover {
+  color: var(--el-color-danger);
+  background: #f1f2f4;
 }
 
 .round-item {
@@ -348,6 +526,12 @@ async function confirmRemoveRound(round: InterviewRound) {
 
 .round-actions {
   margin-left: auto;
+}
+
+.round-result-time {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .round-note {
