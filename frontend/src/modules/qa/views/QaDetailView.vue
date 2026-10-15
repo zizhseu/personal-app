@@ -494,12 +494,7 @@ async function confirmRemove() {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 1420px;
-}
-
-/* 编辑态 / 骨架：保持舒适阅读宽度 */
-.page > .block-card {
-  max-width: 960px;
+  min-width: 0;
 }
 
 /* 查看态：主内容 + 右侧相关栏 */
@@ -513,7 +508,6 @@ async function confirmRemove() {
 
 .main-col {
   flex: 1 1 560px;
-  max-width: 960px;
   min-width: 0;
   display: flex;
   flex-direction: column;

@@ -153,7 +153,8 @@ const campaignDays = computed(() => {
   cursor: pointer;
 }
 .main { min-width: 0; padding: 4px 28px 28px; overflow: auto; overscroll-behavior: contain; }
-.content { width: 100%; max-width: 1480px; min-width: 0; margin: 0 auto; }
+/* 内容宽度由当前窗口决定，全屏与侧栏展开时均铺满可用区域。 */
+.content { width: 100%; min-width: 0; }
 @media (max-width: 1000px) {
   .today { display: none; }
   .topbar { padding-inline: 20px; }

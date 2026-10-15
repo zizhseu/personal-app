@@ -59,7 +59,7 @@ const quizAnswerMode = computed({
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 720px;
+  min-width: 0;
 }
 
 .page-head h1 {

@@ -413,7 +413,7 @@ function letter(i: number): string {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 960px;
+  min-width: 0;
 }
 
 .header {
