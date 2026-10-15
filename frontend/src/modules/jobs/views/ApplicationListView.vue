@@ -211,7 +211,8 @@ import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
-import type { Application, ApplicationStatus, InterviewRound, RoundResult } from '../types'
+import { currentResult, latestRound } from '../selectors'
+import type { Application, ApplicationStatus, RoundResult } from '../types'
 
 const router = useRouter()
 const store = useJobsStore()
@@ -265,9 +266,10 @@ const filtered = computed(() => {
   let list = store.applications
   if (keyword.value) {
     const k = keyword.value.toLowerCase()
+    // 岗位是选填字段（可空），必须可选链，否则空岗位的行会让整个过滤抛错、页面更新冻结
     list = list.filter(
       (a) =>
-        a.company.toLowerCase().includes(k) || a.position.toLowerCase().includes(k),
+        a.company.toLowerCase().includes(k) || !!a.position?.toLowerCase().includes(k),
     )
   }
   if (statusFilter.value.length) {
@@ -276,7 +278,7 @@ const filtered = computed(() => {
   if (resultFilter.value.length) {
     list = list.filter((a) => {
       // 按「结果列显示的值」筛选：Offer 态看 Offer 决定，其余看最新轮次结果
-      const disp = a.status === 'offer' ? a.offerDecision : latestRound(a)?.result ?? null
+      const disp = currentResult(a)
       return disp !== null && resultFilter.value.includes(disp)
     })
   }
@@ -287,11 +289,6 @@ const filtered = computed(() => {
 function latestRoundTime(a: Application): string | null {
   const times = a.rounds.map((r) => r.scheduledAt).filter((t): t is string => !!t)
   return times.length ? times.reduce((m, t) => (t > m ? t : m)) : null
-}
-
-/** 最新流程轮次（按创建顺序，id 最大） */
-function latestRound(a: Application): InterviewRound | null {
-  return a.rounds.length ? a.rounds.reduce((m, r) => (r.id > m.id ? r : m)) : null
 }
 
 /** 列表行 = 筛选结果 + 现算的截止时间与最新轮次结果 */
@@ -377,10 +374,6 @@ function resultDisplay(row: ListRow): { label: string; color: string } | null {
 /** 结果下拉选项随状态切换（Offer 态仅接受 / 拒绝） */
 function resultOptions(row: ListRow): RoundResult[] {
   return row.status === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS
-}
-
-function currentResult(row: ListRow): RoundResult | null {
-  return row.status === 'offer' ? row.offerDecision : row.latestResult
 }
 
 async function quickSetResult(row: ListRow, r: RoundResult) {

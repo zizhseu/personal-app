@@ -33,8 +33,10 @@ export const STATUS_ORDER: ApplicationStatus[] = [
 ]
 
 /** 轮次类型 → 要求的投递状态（null = 不限）；硬约束：状态没到位不能加对应轮次。
- *  复筛（rescreen）覆盖 测评 / 笔试 / AI 面试 / 其他，各家顺序不固定可来回切换 */
+ *  初筛轮（screening）属初筛状态；复筛（rescreen）覆盖 测评 / 笔试 / AI 面试 / 其他，
+ *  各家顺序不固定可来回切换 */
 export const ROUND_TYPE_STATUS: Record<RoundType, ApplicationStatus | null> = {
+  screening: 'screening',
   assessment: 'rescreen',
   written_test: 'rescreen',
   ai: 'rescreen',
@@ -74,8 +76,9 @@ export const BASE_OPTIONS: string[] = [
   '广州',
 ]
 
-/** 流程轮次类型 → 中文标签 */
+/** 流程轮次类型 → 中文标签（键序决定新建轮次下拉的顺序与默认类型） */
 export const ROUND_TYPE_LABELS: Record<RoundType, string> = {
+  screening: '初筛',
   assessment: '测评',
   written_test: '笔试',
   ai: 'AI面试',

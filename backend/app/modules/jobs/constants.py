@@ -10,6 +10,7 @@ APPLICATION_STATUSES = (
 
 # 流程轮次类型
 ROUND_TYPES = (
+    "screening",      # 初筛（创建投递时自动添加的默认轮次）
     "assessment",     # 测评
     "written_test",   # 笔试
     "ai",             # AI面试
@@ -53,8 +54,9 @@ STATUS_LABELS = {
     "declined": "已拒绝",
 }
 
-# 轮次类型中文标签（报错文案用）
+# 轮次类型中文标签（报错文案用；键序决定新建轮次下拉的顺序）
 ROUND_TYPE_LABELS = {
+    "screening": "初筛",
     "assessment": "测评",
     "written_test": "笔试",
     "ai": "AI面试",
@@ -69,6 +71,7 @@ ROUND_TYPE_LABELS = {
 # 轮次类型 → 要求的投递状态（None = 不限）；硬约束：状态没到位不能加对应轮次
 # 复筛状态覆盖 测评 / 笔试 / AI 面试 / 其他（各家顺序不固定，可来回切换）
 ROUND_TYPE_STATUS = {
+    "screening": "screening",
     "assessment": "rescreen",
     "written_test": "rescreen",
     "ai": "rescreen",

@@ -18,6 +18,21 @@
         </div>
         <el-switch v-model="importFilenameAsTag" />
       </div>
+
+      <div class="group-title margin-top">笔试选择</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">答案与解析显示时机</div>
+          <div class="setting-desc">
+            立即显示：打开题目即见答案；作答后显示：选择选项提交后显示并判定对错；手动查看：点击按钮后显示
+          </div>
+        </div>
+        <el-radio-group v-model="quizAnswerMode" size="small">
+          <el-radio-button value="instant">立即显示</el-radio-button>
+          <el-radio-button value="afterAnswer">作答后</el-radio-button>
+          <el-radio-button value="manual">手动查看</el-radio-button>
+        </el-radio-group>
+      </div>
     </el-card>
   </div>
 </template>
@@ -31,6 +46,11 @@ const store = useSettingsStore()
 const importFilenameAsTag = computed({
   get: () => store.importFilenameAsTag,
   set: (v) => store.update({ importFilenameAsTag: v }),
+})
+
+const quizAnswerMode = computed({
+  get: () => store.quizAnswerMode,
+  set: (v) => store.update({ quizAnswerMode: v }),
 })
 </script>
 
@@ -64,6 +84,10 @@ const importFilenameAsTag = computed({
   font-weight: 600;
   color: var(--ink-3);
   margin-bottom: 4px;
+}
+
+.group-title.margin-top {
+  margin-top: 18px;
 }
 
 .setting-row {

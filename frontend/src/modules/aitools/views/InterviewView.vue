@@ -3,7 +3,7 @@
     <div class="page-head">
       <div>
         <h1>AI 面试</h1>
-        <p class="sub">从面试八股选题，AI 面试官语音提问、逐题追问并点评</p>
+        <p class="sub">从面试问答选题，AI 面试官语音提问、逐题追问并点评</p>
       </div>
       <div class="actions" v-if="phase === 'running'">
         <el-button :icon="muted ? 'Mute' : 'Bell'" @click="muted = !muted">

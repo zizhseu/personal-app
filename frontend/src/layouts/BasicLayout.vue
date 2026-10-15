@@ -60,7 +60,7 @@
               </el-icon>
             </span>
           </router-link>
-          <div v-if="g.items.length === 0" class="group-empty">筹备中，敬请期待</div>
+          <div v-if="g.items.length === 0" class="group-empty">{{ g.creatable ? '点击 + 新建分类' : '筹备中，敬请期待' }}</div>
         </div>
         <div class="sidebar-foot">
           <router-link
@@ -86,17 +86,24 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { modules } from '@/modules'
-// 注：战役徽章与 qa 分类菜单读取各自模块 store；模块化演进时再抽离
+import type { MenuItem } from '@/shared/types/module'
+// 注：战役徽章与 qa/quiz 分类菜单读取各自模块 store；模块化演进时再抽离
 import { useJobsStore } from '@/modules/jobs/store'
 import { useQaStore } from '@/modules/qa/store'
+import { useQuizStore } from '@/modules/quiz/store'
+import { useTodoStore } from '@/modules/todo/store'
 
 const route = useRoute()
 const store = useJobsStore()
 const qaStore = useQaStore()
+const quizStore = useQuizStore()
+const todoStore = useTodoStore()
 
 onMounted(() => {
   void store.ensureLoaded() // 战役徽章数据
   void qaStore.ensureLoaded() // qa 分类菜单
+  void quizStore.ensureLoaded() // quiz 分类菜单
+  void todoStore.ensureLoaded() // 待办目录菜单
 })
 
 /** 侧栏分组 = 模块 → { 显示名, 菜单项 }；模块提供 menu() 时用动态菜单（如 qa 分类）；sidebar: false 的模块不生成分组 */
@@ -112,7 +119,7 @@ const groups = computed(() =>
       ? m.menu()
       : m.routes
           .filter((r) => r.meta?.title && !r.meta?.hidden)
-          .map((r) => ({ path: r.path as string, title: r.meta?.title as string })),
+          .map<MenuItem>((r) => ({ path: r.path as string, title: r.meta?.title as string })),
   })),
 )
 

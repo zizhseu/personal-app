@@ -5,8 +5,9 @@ export type ApplicationStatus =
   | 'interviewing'
   | 'offer'
 
-/** 流程轮次类型（测评/笔试/面试等） */
+/** 流程轮次类型（初筛/测评/笔试/面试等；screening 轮为创建投递时自动添加的默认轮次） */
 export type RoundType =
+  | 'screening'
   | 'assessment'
   | 'written_test'
   | 'ai'

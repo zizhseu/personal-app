@@ -92,6 +92,10 @@ def create_application(db: Session, data: ApplicationCreate) -> Application:
     row = Application(**data.model_dump())
     # 初始状态也记一条历史（如：投递中 → 2026-09-10 15:30）
     row.status_history.append(StatusHistory(status=row.status))
+    # 初筛状态下自动添加默认的「初筛」轮次：流程时间线从投递创建即有起点
+    # （结果未开始、时间待定，后续可编辑；状态推进到复筛时会被联动置「通过」）
+    if row.status == "screening":
+        row.rounds.append(InterviewRound(round_type="screening", result="not_started"))
     db.add(row)
     db.commit()
     db.refresh(row)

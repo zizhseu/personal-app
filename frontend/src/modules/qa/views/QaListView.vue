@@ -73,6 +73,15 @@
         编辑标签
       </el-button>
       <el-button
+        plain
+        icon="Position"
+        :disabled="selectedIds.size === 0"
+        title="勾选题目后可移动到其他分类"
+        @click="openMoveDialog"
+      >
+        移动到
+      </el-button>
+      <el-button
         type="danger"
         plain
         icon="Delete"
@@ -240,6 +249,20 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 移动到其他分类 -->
+    <el-dialog v-model="moveVisible" title="移动到其他分类" width="380px">
+      <p class="batch-hint">
+        将选中的 <b>{{ selectedIds.size }}</b> 条题目移动到：
+      </p>
+      <el-select v-model="moveTarget" placeholder="选择目标分类" style="width: 100%">
+        <el-option v-for="c in moveOptions" :key="c.id" :label="c.name" :value="c.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="moveVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!moveTarget" @click="applyMove">移动</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -380,6 +403,29 @@ async function applyBatchTag() {
   batchTagVisible.value = false
   selectedIds.value = new Set()
   ElMessage.success(`已更新 ${changed} 条题目的标签`)
+}
+
+/** 批量移动到其他分类 */
+const moveVisible = ref(false)
+const moveTarget = ref<number>()
+
+/** 目标分类候选 = 除当前分类外的所有分类 */
+const moveOptions = computed(() => store.categories.filter((c) => c.id !== categoryId.value))
+
+function openMoveDialog() {
+  moveTarget.value = undefined
+  moveVisible.value = true
+}
+
+async function applyMove() {
+  if (!moveTarget.value) return
+  const ids = [...selectedIds.value]
+  for (const id of ids) await api.updateItem(id, { categoryId: moveTarget.value })
+  await store.loadAll()
+  moveVisible.value = false
+  selectedIds.value = new Set()
+  const targetName = store.categories.find((c) => c.id === moveTarget.value)?.name ?? ''
+  ElMessage.success(`已移动 ${ids.length} 条题目到「${targetName}」`)
 }
 
 const existCount = computed(() => importPreview.value?.filter((p) => p.exists).length ?? 0)

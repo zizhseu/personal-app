@@ -17,10 +17,17 @@
 
     <!-- 图表区 -->
     <el-row :gutter="16" class="charts">
-      <el-col :span="10">
-        <el-card shadow="never" class="chart-card">
+      <el-col :xs="24" :sm="12">
+        <el-card shadow="never" class="chart-card pie-card">
           <template #header>状态分布</template>
           <VChart v-if="statusOption" :option="statusOption" autoresize class="chart pie" />
+          <el-empty v-else description="暂无数据" :image-size="80" />
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12">
+        <el-card shadow="never" class="chart-card pie-card">
+          <template #header>结果分布</template>
+          <VChart v-if="resultOption" :option="resultOption" autoresize class="chart pie" />
           <el-empty v-else description="暂无数据" :image-size="80" />
         </el-card>
       </el-col>
@@ -65,8 +72,9 @@ import VChart from 'vue-echarts'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import StatCard from '../components/StatCard.vue'
-import { STATUS_COLORS, STATUS_LABELS, STATUS_ORDER } from '../constants'
+import { STATUS_COLORS, STATUS_LABELS, STATUS_ORDER, RESULT_COLORS, RESULT_LABELS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
+import { resultBucket, type ResultBucket } from '../selectors'
 import type { ApplicationStatus } from '../types'
 
 use([CanvasRenderer, PieChart, BarChart, TooltipComponent, LegendComponent, GridComponent])
@@ -129,6 +137,46 @@ const statusOption = computed(() => {
         radius: ['0%', '68%'],
         center: ['50%', '46%'],
         // 2px 表面色间隔，扇区间有清晰分隔
+        itemStyle: { borderColor: '#fff', borderWidth: 2 },
+        label: { formatter: '{b} {c}', color: '#374151' },
+        data: counts,
+      },
+    ],
+  }
+})
+
+// ---------- 结果分布：每条投递只计当前展示的一个结果 ----------
+const resultOption = computed(() => {
+  if (store.applications.length === 0) return null
+
+  const tally = new Map<ResultBucket, number>()
+  for (const application of store.applications) {
+    const bucket = resultBucket(application)
+    tally.set(bucket, (tally.get(bucket) ?? 0) + 1)
+  }
+
+  const order: ResultBucket[] = [
+    ...NORMAL_RESULT_OPTIONS,
+    ...OFFER_RESULT_OPTIONS,
+    'undecided',
+    'unrecorded',
+  ]
+  const counts = order.filter((key) => tally.has(key)).map((key) => ({
+    name: key === 'undecided' ? '待决定' : key === 'unrecorded' ? '未记录' : RESULT_LABELS[key],
+    value: tally.get(key) ?? 0,
+    itemStyle: {
+      color: key === 'undecided' ? '#94A3B8' : key === 'unrecorded' ? '#CBD5E1' : RESULT_COLORS[key],
+    },
+  }))
+
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}：{c} 条（{d}%）' },
+    legend: { type: 'scroll', bottom: 0, icon: 'circle', textStyle: { color: '#4b5563' } },
+    series: [
+      {
+        type: 'pie',
+        radius: ['0%', '62%'],
+        center: ['50%', '44%'],
         itemStyle: { borderColor: '#fff', borderWidth: 2 },
         label: { formatter: '{b} {c}', color: '#374151' },
         data: counts,
@@ -213,6 +261,17 @@ const trendOption = computed(() => {
   border-radius: 8px;
 }
 
+.pie-card {
+  height: 100%;
+}
+
+.pie-card :deep(.el-card__body) {
+  min-height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .chart-header {
   display: flex;
   justify-content: space-between;
@@ -226,5 +285,6 @@ const trendOption = computed(() => {
 
 .chart.pie {
   height: 300px;
+  width: 100%;
 }
 </style>

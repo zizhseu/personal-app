@@ -2,13 +2,49 @@
 __pycache__/
 *.py[cod]
 .venv/
-backend/data/app.db
-backend/.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 参考仓库、本地运行数据与备份
+/references/
+/backend/data/
+/data/
+/.runtime/
+/backups/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.dump
+*.bak
+*.backup
+
+# 本地配置、凭据与私钥（保留无密钥的示例配置）
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Node
 node_modules/
 dist/
 *.local
+*.tsbuildinfo
+
+# 日志和临时运行标记
+*.log
+*.pid
+.tmp-id
 
 # IDE
 .idea/

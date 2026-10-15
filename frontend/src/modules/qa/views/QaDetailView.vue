@@ -10,18 +10,44 @@
     </el-page-header>
 
     <template v-if="item || isNew">
-      <!-- 编辑态：页面内直接填写 -->
+      <!-- 编辑态：问题区 / 答案区，与查看态视觉对应 -->
       <el-card v-if="editing" shadow="never" class="block-card">
-        <div class="form-label">问题</div>
-        <el-input v-model="draft.question" placeholder="面试问题 / 考点" size="large" />
-        <div class="form-label margin-top">答案要点（支持 Markdown：## 标题、- 列表、**加粗**、代码块）</div>
-        <el-input
-          v-model="draft.answer"
-          type="textarea"
-          :rows="16"
-          placeholder="## 考点&#10;- 要点一&#10;- 要点二&#10;&#10;\`\`\`sql&#10;SELECT ...&#10;\`\`\`"
-        />
+        <div class="q-block">
+          <span class="mark q">Q</span>
+          <el-input
+            v-model="draft.question"
+            placeholder="面试问题 / 考点"
+            size="large"
+            class="q-input"
+            @keydown.ctrl.enter.prevent="save"
+          />
+        </div>
+        <div class="divider" />
+        <div class="a-block">
+          <span class="mark a">A</span>
+          <div class="a-editor">
+            <el-tabs v-model="answerTab" class="answer-tabs">
+              <el-tab-pane label="编辑" name="edit">
+                <el-input
+                  v-model="draft.answer"
+                  type="textarea"
+                  :rows="14"
+                  placeholder="答案要点，支持 Markdown：&#10;## 小标题&#10;- 要点一&#10;**加粗**、\`\`\`sql 代码块 \`\`\`"
+                />
+              </el-tab-pane>
+              <el-tab-pane label="预览" name="preview">
+                <div v-if="draft.answer.trim()" class="a-preview md-body" v-html="answerPreviewHtml"></div>
+                <div v-else class="a-preview-empty">暂无内容，切回「编辑」填写</div>
+              </el-tab-pane>
+            </el-tabs>
+            <div class="editor-foot">
+              <span class="hint">支持 Markdown：## 标题、- 列表、**加粗**、代码块</span>
+              <span class="num count">{{ draft.answer.length }} 字</span>
+            </div>
+          </div>
+        </div>
         <div class="edit-actions">
+          <span class="shortcut-hint">Ctrl + Enter 快速保存</span>
           <el-button @click="cancelEdit">取消</el-button>
           <el-button type="primary" :loading="saving" @click="save">保存</el-button>
         </div>
@@ -228,6 +254,10 @@ const editing = ref(isNew.value)
 const draft = reactive({ question: '', answer: '' })
 const saving = ref(false)
 
+/** 答案编辑：Markdown 预览切换 */
+const answerTab = ref<'edit' | 'preview'>('edit')
+const answerPreviewHtml = computed(() => renderMarkdown(draft.answer))
+
 /** 标签（查看态浮层直接编辑，双向代理到当前题目） */
 const newTag = ref('')
 const itemTags = computed({
@@ -276,7 +306,7 @@ const allTags = computed(() => {
 const autoRelated = computed<QaItem[]>(() => {
   const cur = item.value
   if (!cur || !cur.tags?.length) return []
-  const key = (tags: string[] | null | undefined) => [...new Set(tags ?? [])].sort().join(' ')
+  const key = (tags: string[] | null | undefined) => [...new Set(tags ?? [])].sort().join(' ')
   const self = key(cur.tags)
   return store.items.filter((o) => o.id !== cur.id && !!o.tags?.length && key(o.tags) === self)
 })
@@ -551,13 +581,14 @@ async function confirmRemove() {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  border-bottom: 1px dashed var(--line-soft);
 }
 
 .related-item {
   flex: 1;
   min-width: 0;
   display: block;
-  padding: 7px 0;
+  padding: 8px 0;
   font-size: 13px;
   color: var(--ink-2);
   text-decoration: none;
@@ -565,6 +596,13 @@ async function confirmRemove() {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+
+/* 最后一条不带分隔线 */
+.related-item:last-child,
+.related-item-wrap:last-child {
+  border-bottom: none;
 }
 
 .related-item:hover {
@@ -731,7 +769,7 @@ async function confirmRemove() {
   color: var(--ink-3);
 }
 
-/* 编辑态 */
+/* 编辑态：与查看态同构（Q/A 区块） */
 .form-label {
   font-size: 13px;
   font-weight: 600;
@@ -739,13 +777,68 @@ async function confirmRemove() {
   margin-bottom: 8px;
 }
 
-.form-label.margin-top {
-  margin-top: 20px;
+.q-input {
+  flex: 1;
+}
+
+.a-editor {
+  flex: 1;
+  min-width: 0;
+}
+
+.answer-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+
+/* 编辑 / 预览固定同高，切换时窗口不跳动 */
+.answer-tabs :deep(.el-textarea__inner) {
+  height: 440px;
+  resize: none;
+}
+
+.a-preview {
+  height: 440px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.a-preview-empty {
+  padding: 24px 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.editor-foot .hint {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.editor-foot .count {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcut-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .edit-actions {
   margin-top: 18px;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }

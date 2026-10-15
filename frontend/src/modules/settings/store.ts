@@ -5,6 +5,7 @@ const STORAGE_KEY = 'app-settings'
 
 const DEFAULTS: AppSettings = {
   importFilenameAsTag: true,
+  quizAnswerMode: 'afterAnswer',
 }
 
 function load(): AppSettings {

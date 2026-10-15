@@ -72,10 +72,10 @@ function categoryMenu(): MenuItem[] {
   }))
 }
 
-/** qa 模块：面试八股（分类由用户自建，详情/新建共用 QaDetailView，页面内直接编辑） */
+/** qa 模块：面试问答（分类由用户自建，详情/新建共用 QaDetailView，页面内直接编辑） */
 export const qaModule: AppModule = {
   name: 'qa',
-  label: '面试八股',
+  label: '面试问答',
   creatable: true,
   menu: categoryMenu,
   onCreate: () => createCategoryFlow(),
