@@ -1,29 +1,35 @@
 import request, { AI_REQUEST_TIMEOUT_MS } from '@/shared/api/request'
-import type { ChatMessage } from './types'
+import type { InterviewSession, InterviewSummary, ResumeDocument, ResumeInput, ResumeSummary, ReviewAction, ReviewActionInput } from './types'
 
-/** aitools 模块接口调用 */
+export const fetchResumes = () => request.get('/aitools/resumes') as Promise<ResumeSummary[]>
+export const fetchResume = (id: number) => request.get(`/aitools/resumes/${id}`) as Promise<ResumeDocument>
+export const createResume = (data: ResumeInput) => request.post('/aitools/resumes', data) as Promise<ResumeDocument>
+export const updateResume = (id: number, data: ResumeInput) => request.put(`/aitools/resumes/${id}`, data) as Promise<ResumeDocument>
+export const deleteResume = (id: number) => request.delete(`/aitools/resumes/${id}`)
 
-/** AI 面试官对话 */
-export function interviewChat(payload: {
-  questionIds: number[]
-  history: ChatMessage[]
-  message: string
-}): Promise<{ reply: string }> {
-  return request.post('/aitools/interview/chat', payload, { timeout: AI_REQUEST_TIMEOUT_MS }) as Promise<{ reply: string }>
+export function extractResume(file: File): Promise<ResumeInput> {
+  const body = new FormData()
+  body.append('file', file)
+  return request.post('/aitools/resumes/extract', body, { timeout: 30_000 }) as Promise<ResumeInput>
 }
 
-/** TTS：文本 → mp3 音频 Blob（用独立 fetch 以接收二进制） */
-export async function ttsToBlob(text: string): Promise<Blob> {
+export const fetchInterviews = () => request.get('/aitools/interviews') as Promise<InterviewSummary[]>
+export const fetchInterview = (id: number) => request.get(`/aitools/interviews/${id}`) as Promise<InterviewSession>
+export const createInterview = (data: { resumeId: number; targetRole: string; focus: string }) => request.post('/aitools/interviews', data) as Promise<InterviewSession>
+export const deleteInterview = (id: number) => request.delete(`/aitools/interviews/${id}`)
+
+export function generateInterview(id: number, action: 'start' | 'messages' | 'review' | 'retry', requestId: string, content?: string): Promise<InterviewSession> {
+  return request.post(`/aitools/interviews/${id}/${action}`, { requestId, ...(content === undefined ? {} : { content }) }, { timeout: AI_REQUEST_TIMEOUT_MS }) as Promise<InterviewSession>
+}
+
+export const exportReview = (id: number, data: ReviewActionInput) => request.post(`/aitools/interviews/${id}/actions`, data) as Promise<ReviewAction>
+
+export async function ttsToBlob(text: string, signal?: AbortSignal): Promise<Blob> {
   const resp = await fetch('/api/aitools/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }), signal,
   })
-  if (!resp.ok) throw new Error('TTS 请求失败')
+  if (!resp.ok) throw new Error('语音合成暂时不可用')
   return resp.blob()
 }
 
-/** LLM 是否已配置 Key */
-export function fetchStatus(): Promise<{ llmReady: boolean }> {
-  return request.get('/aitools/status') as Promise<{ llmReady: boolean }>
-}
+export const fetchStatus = () => request.get('/aitools/status') as Promise<{ llmReady: boolean; demoMode?: boolean }>
