@@ -19,7 +19,7 @@
           @click="emit('open', item)"
         >
           <span class="time num" :class="{ 'time-danger': danger }">{{ item.time }}</span>
-          <el-tag effect="plain" size="small" :type="item.kind === 'event' ? 'warning' : ''">
+          <el-tag effect="plain" size="small" :type="item.kind === 'event' ? 'warning' : 'primary'">
             {{ item.typeLabel }}
           </el-tag>
           <span class="title">{{ item.title }}</span>
@@ -46,7 +46,7 @@
           :page-size="PAGE_SIZE"
           :total="items.length"
           :pager-count="5"
-          small
+          size="small"
           background
           layout="prev, pager, next"
         />

@@ -110,6 +110,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchStatus, interviewChat, ttsToBlob } from '../api'
 import { useQaStore } from '@/modules/qa/store'
+import type { QaItem } from '@/modules/qa/types'
 import type { ChatMessage } from '../types'
 import { renderMarkdown, markdownToText } from '@/shared/utils/markdown'
 
@@ -264,7 +265,7 @@ function toggleMic() {
     // results 是从识别开始的累计结果（含已确认与中间结果），全量重建实时显示
     let text = ''
     for (let i = 0; i < e.results.length; i++) {
-      text += e.results[i][0].transcript
+      text += e.results[i]?.[0]?.transcript ?? ''
     }
     liveTranscript = text
     input.value = voiceBase ? `${voiceBase} ${liveTranscript}` : liveTranscript

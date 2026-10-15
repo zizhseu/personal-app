@@ -1,6 +1,6 @@
 # 个人 App
 
-本地个人应用，首个功能模块：**秋招投递管理（JobTracker）**。架构按功能模块划分，未来可扩展待办事项等模块。
+本地个人应用，包含秋招投递管理、面试问答、笔试选择题、待办事项和 AI 模拟面试。前后端按功能模块组织，菜单和路由由模块注册表生成。
 
 ## 技术栈
 
@@ -65,10 +65,10 @@ frontend/src/
     └── jobs/                # 秋招投递模块（views + components + api + store）
 ```
 
-## 如何新增一个功能模块（以「待办事项」为例）
+## 如何新增一个功能模块
 
-1. **后端**：复制 `backend/app/modules/jobs/` 的文件结构到 `backend/app/modules/todo/`，实现 `module.py` 导出 `module` 实例即可——路由会被自动发现挂载，无需改任何核心代码。
-2. **前端**：复制 `frontend/src/modules/jobs/` 到 `frontend/src/modules/todo/`，在 `frontend/src/modules/index.ts` 中 import 并加入数组即可——路由和侧边菜单自动生成。
+1. **后端**：参考 `backend/app/modules/todo/` 创建独立模块，实现 `module.py` 并导出 `module` 实例，路由会被自动发现挂载。
+2. **前端**：参考 `frontend/src/modules/todo/` 创建模块，在 `frontend/src/modules/index.ts` 中 import 并加入数组，路由和侧边菜单随之生成。
 
 ## 数据
 
@@ -77,3 +77,17 @@ SQLite 数据库文件：`backend/data/app.db`（首次启动自动创建），�
 ### 版本升级与数据库兼容
 
 后端启动时会自动执行幂等迁移（补列 / 数据修正），通常无需手动操作。各版本的功能更新与**数据库结构变更明细**见 [CHANGELOG.md](CHANGELOG.md)——升级前校对或让 AI 辅助修改数据库时，请先阅读该文件（含已知残留列与枚举变更说明）。
+
+`references/`、数据库、`.env`、依赖和本地运行产物不纳入 Git。提交前可用 `git status --short` 与 `git diff --cached --name-only` 核对待提交文件。
+
+## 回归验证
+
+在 `personal-app` conda 环境中，从 `backend` 目录运行：
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+测试使用独立内存数据库和模拟模型，不访问业务数据库或外部模型服务。从 `frontend` 目录运行 `npm run build`，执行完整类型检查和生产构建。
+
+最近一次修复及浏览器实测范围见 [验证记录](docs/validation-2026-10-15.md)。

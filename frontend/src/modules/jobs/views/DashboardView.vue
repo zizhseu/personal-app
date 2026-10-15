@@ -9,8 +9,8 @@
     </div>
 
     <!-- 统计卡片行 -->
-    <el-row :gutter="16">
-      <el-col v-for="card in statCards" :key="card.label" :span="6">
+    <el-row :gutter="16" class="stats">
+      <el-col v-for="card in statCards" :key="card.label" :xs="12" :sm="6">
         <StatCard :value="card.value" :label="card.label" :dot="card.dot" />
       </el-col>
     </el-row>
@@ -109,13 +109,13 @@ const statCards = computed(() => {
   const apps = store.applications
   const weekAgo = dayjs().subtract(7, 'day')
   return [
-    { label: '投递总数', value: apps.length, dot: '#17181a' },
+    { label: '投递总数', value: apps.length, dot: '#6366f1' },
     { label: '面试', value: apps.filter((a) => a.status === 'interviewing').length, dot: '#8b5cf6' },
     { label: 'Offer 数', value: apps.filter((a) => a.status === 'offer').length, dot: '#15803d' },
     {
       label: '本周新增',
       value: apps.filter((a) => a.applyDate && dayjs(a.applyDate).isAfter(weekAgo)).length,
-      dot: '#e8590c',
+      dot: '#f97316',
     },
   ]
 })
@@ -235,7 +235,7 @@ const trendOption = computed(() => {
         type: 'bar',
         data: counts,
         barMaxWidth: 28,
-        itemStyle: { color: '#3B82F6', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: '#6366f1', borderRadius: [5, 5, 0, 0] },
       },
     ],
   }
@@ -258,7 +258,7 @@ const trendOption = computed(() => {
 }
 
 .chart-card {
-  border-radius: 8px;
+  border-radius: var(--radius-card);
 }
 
 .pie-card {
@@ -274,10 +274,14 @@ const trendOption = computed(() => {
 
 .chart-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
 }
+
+.chart-header :deep(.el-date-editor) { max-width: 100%; }
+.stats { row-gap: 16px; }
 
 .chart {
   height: 280px;

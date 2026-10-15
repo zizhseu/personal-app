@@ -316,8 +316,8 @@ const sorted = computed(() => {
     if (prop === 'deadline') {
       return dir * (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999')
     }
-    const av = String((a as Record<string, unknown>)[prop] ?? '')
-    const bv = String((b as Record<string, unknown>)[prop] ?? '')
+    const av = prop in a ? String(a[prop as keyof ListRow] ?? '') : ''
+    const bv = prop in b ? String(b[prop as keyof ListRow] ?? '') : ''
     return dir * av.localeCompare(bv, 'zh')
   })
 })
@@ -378,6 +378,7 @@ function resultOptions(row: ListRow): RoundResult[] {
 
 async function quickSetResult(row: ListRow, r: RoundResult) {
   if (row.status === 'offer') {
+    if (r !== 'accepted' && r !== 'rejected_offer') return
     await store.setOfferDecision(row.id, r)
   } else {
     const latest = latestRound(row)

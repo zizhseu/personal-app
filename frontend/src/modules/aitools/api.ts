@@ -1,4 +1,4 @@
-import request from '@/shared/api/request'
+import request, { AI_REQUEST_TIMEOUT_MS } from '@/shared/api/request'
 import type { ChatMessage } from './types'
 
 /** aitools 模块接口调用 */
@@ -9,7 +9,7 @@ export function interviewChat(payload: {
   history: ChatMessage[]
   message: string
 }): Promise<{ reply: string }> {
-  return request.post('/aitools/interview/chat', payload) as Promise<{ reply: string }>
+  return request.post('/aitools/interview/chat', payload, { timeout: AI_REQUEST_TIMEOUT_MS }) as Promise<{ reply: string }>
 }
 
 /** TTS：文本 → mp3 音频 Blob（用独立 fetch 以接收二进制） */

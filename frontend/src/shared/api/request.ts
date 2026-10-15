@@ -1,6 +1,9 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+/** 后端模型调用最多等待 120 秒，另预留 10 秒用于接口处理和传输。 */
+export const AI_REQUEST_TIMEOUT_MS = 130_000
+
 /** 统一 axios 实例：走 Vite 代理到后端 /api */
 const request = axios.create({
   baseURL: '/api',
@@ -12,6 +15,9 @@ request.interceptors.response.use(
   (error) => {
     // 提取 FastAPI 错误信息并弹中文提示
     let msg = '请求失败，请稍后重试'
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      msg = '请求超时，请稍后重试'
+    }
     const detail = error.response?.data?.detail
     if (typeof detail === 'string') {
       msg = detail

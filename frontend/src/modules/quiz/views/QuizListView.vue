@@ -58,7 +58,7 @@
             :page-size="PAGE_SIZE"
             :total="filtered.length"
             :pager-count="5"
-            small
+            size="small"
             background
             layout="total, prev, pager, next"
           />

@@ -54,7 +54,7 @@
       </el-card>
 
       <!-- 查看态：主内容 + 右侧相关题目栏 -->
-      <template v-else>
+      <template v-else-if="item">
         <div class="detail-row">
           <div class="main-col">
             <el-card shadow="never" class="block-card">
@@ -460,14 +460,14 @@ const categoryItems = computed(() =>
 const prevItem = computed(() => {
   if (!item.value) return null
   const idx = categoryItems.value.findIndex((i) => i.id === item.value!.id)
-  return idx > 0 ? categoryItems.value[idx - 1] : null
+  return idx > 0 ? categoryItems.value[idx - 1] ?? null : null
 })
 
 const nextItem = computed(() => {
   if (!item.value) return null
   const idx = categoryItems.value.findIndex((i) => i.id === item.value!.id)
   return idx >= 0 && idx < categoryItems.value.length - 1
-    ? categoryItems.value[idx + 1]
+    ? categoryItems.value[idx + 1] ?? null
     : null
 })
 
@@ -522,6 +522,7 @@ async function confirmRemove() {
 
 .related-col {
   width: 380px;
+  max-width: 100%;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -939,5 +940,16 @@ async function confirmRemove() {
 
 .spacer {
   flex: 1;
+}
+
+@media (max-width: 760px) {
+  .head-line, .meta-row, .edit-actions, .editor-foot { flex-wrap: wrap; }
+  .meta-row .el-button + .el-button { margin-left: 0; }
+  .meta-row .spacer { display: none; }
+  .q-text { min-width: 0; overflow-wrap: anywhere; font-size: 17px; }
+  .q-block, .a-block { gap: 10px; }
+  .edit-actions .shortcut-hint { width: 100%; }
+  .editor-foot .hint { font-size: 11px; }
+  .related-col { width: 100%; }
 }
 </style>

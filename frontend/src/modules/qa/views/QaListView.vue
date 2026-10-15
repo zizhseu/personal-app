@@ -213,7 +213,7 @@
             :page-size="PAGE_SIZE"
             :total="filtered.length"
             :pager-count="5"
-            small
+            size="small"
             background
             layout="total, prev, pager, next"
           />
@@ -610,9 +610,12 @@ function goCreate() {
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }
+
+.toolbar .el-button + .el-button { margin-left: 0; }
 
 .toolbar .spacer {
   flex: 1;
@@ -941,5 +944,18 @@ function goCreate() {
   white-space: nowrap;
   font-size: 13.5px;
   color: var(--ink-2);
+}
+
+@media (max-width: 760px) {
+  .toolbar { gap: 8px; }
+  .toolbar .spacer { display: none; }
+  .qa-card { padding: 12px; }
+  .qa-head { gap: 6px; }
+  .status-tag { flex-shrink: 0; }
+  .qa-meta { flex-wrap: wrap; white-space: normal; }
+  .snippet { flex-basis: 100%; }
+  .read-time { margin-left: auto; }
+  .import-head { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .add-tag-btn { opacity: 1; }
 }
 </style>

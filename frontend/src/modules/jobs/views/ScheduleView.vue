@@ -56,7 +56,7 @@ import { ROUND_TYPE_LABELS, EVENT_TYPE_LABELS } from '../constants'
 import ScheduleList from '../components/ScheduleList.vue'
 import EventFormDialog from '../components/EventFormDialog.vue'
 import { useJobsStore } from '../store'
-import type { RoundResult, ScheduleItem } from '../types'
+import type { RoundResult, ScheduleEvent, ScheduleItem } from '../types'
 
 const router = useRouter()
 const store = useJobsStore()
