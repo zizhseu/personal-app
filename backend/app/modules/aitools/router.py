@@ -18,10 +18,11 @@ router = APIRouter(prefix="/api/aitools", tags=["AI 工具"])
 
 @router.get("/status")
 def status():
-    """前端配置检查：LLM Key 是否已配置。"""
-    from app.core.config import LLM_API_KEY
+    """检查当前生效的连接配置；不会发出模型请求或消耗额度。"""
+    from app.modules.settings.service import current_connection, is_ready
 
-    return {"llmReady": bool(LLM_API_KEY)}
+    connection = current_connection()
+    return {"llmReady": is_ready(connection), "authMode": connection.auth_mode, "model": connection.model}
 
 
 @router.get("/resumes")

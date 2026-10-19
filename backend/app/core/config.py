@@ -1,4 +1,4 @@
-"""应用配置：单机工具，直接硬编码 + 可选 .env 覆盖。"""
+"""应用启动默认配置；界面保存的模型连接由设置模块动态读取。"""
 import os
 from pathlib import Path
 
@@ -30,6 +30,7 @@ CORS_ORIGINS = [
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_STYLE = os.getenv("LLM_API_STYLE", "chat_completions")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # ---------- AI 面试：TTS（edge-tts 神经音色，免费） ----------

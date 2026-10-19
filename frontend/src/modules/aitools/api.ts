@@ -32,4 +32,4 @@ export async function ttsToBlob(text: string, signal?: AbortSignal): Promise<Blo
   return resp.blob()
 }
 
-export const fetchStatus = () => request.get('/aitools/status') as Promise<{ llmReady: boolean; demoMode?: boolean }>
+export const fetchStatus = () => request.get('/aitools/status') as Promise<{ llmReady: boolean; demoMode?: boolean; authMode?: string; model?: string }>

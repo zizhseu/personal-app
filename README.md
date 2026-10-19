@@ -48,7 +48,9 @@ npm run dev
 3. 简历快照和已提交对话会保存到本地数据库。刷新或切换页面后，可以从面试记录继续；生成失败时可重试。
 4. 完成至少一次作答后，选择「结束并生成复盘」。复盘展示逐题反馈、简历原文引用和原始回答；确认后可加入问答或待办，保存前可修改内容并选择分类。
 
-模型使用 `backend/.env` 中的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`，可参考 `backend/.env.example`；修改后重启后端。文件导入只做本地文本提取，开始面试和生成复盘时才调用配置的模型。语音播放默认关闭，可手动开启。
+在「设置 → 大模型」配置服务地址、API Key 和模型，或者连接 ChatGPT 账号。支持获取模型列表、测试连接和保存后立即生效，AI 面试与选择题解析共用此连接。尚未在界面保存时，继续使用 `backend/.env` 中的默认值，可参考 `backend/.env.example`。
+
+ChatGPT 账号通过官方浏览器授权接入，需要符合官方开放范围、套餐与模型权限；应用不会接收账号密码。账号授权、API Key 的区别、保存规则和排错见 [大模型设置说明](docs/model-settings.md)。文件导入只做本地文本提取，开始面试和生成复盘时才调用配置的模型。语音播放默认关闭，可手动开启。
 
 升级本版本时，在项目专用 conda 环境中重新运行 `pip install -r requirements.txt`（从 `backend` 目录），然后重启后端，新表会自动创建。功能契约、数据结构和实测范围见 [简历面试说明](docs/resume-interview.md)。
 
@@ -89,7 +91,7 @@ SQLite 数据库文件：`backend/data/app.db`（首次启动自动创建），�
 
 后端启动时会自动执行幂等迁移（补列 / 数据修正），通常无需手动操作。各版本的功能更新与**数据库结构变更明细**见 [CHANGELOG.md](CHANGELOG.md)——升级前校对或让 AI 辅助修改数据库时，请先阅读该文件（含已知残留列与枚举变更说明）。
 
-`references/`、数据库、`.env`、依赖和本地运行产物不纳入 Git。提交前可用 `git status --short` 与 `git diff --cached --name-only` 核对待提交文件。
+`references/`、数据库、`.env`、依赖和本地运行产物不纳入 Git。模型配置和账号令牌保存在 `backend/data/*.private`，同样排除在 Git 外；Windows 使用当前用户的 DPAPI 保护内容，不能复制到另一个 Windows 用户后直接使用。提交前可用 `git status --short` 与 `git diff --cached --name-only` 核对待提交文件。
 
 ## 回归验证
 
@@ -99,6 +101,7 @@ SQLite 数据库文件：`backend/data/app.db`（首次启动自动创建），�
 python -m unittest discover -s tests -v
 ```
 
-测试使用独立内存数据库和模拟模型，不访问业务数据库或外部模型服务。从 `frontend` 目录运行 `npm run build`，执行完整类型检查和生产构建。
+测试使用独立内存数据库、临时私有配置和模拟模型，不访问业务数据库或外部模型服务。从 `frontend` 目录运行 `npm run build`，执行完整类型检查和生产构建。
 
 最近一次修复及浏览器实测范围见 [验证记录](docs/validation-2026-10-15.md)。
+模型设置与账号授权的新增验证见 [模型设置验证记录](docs/validation-model-settings-2026-10-19.md)。

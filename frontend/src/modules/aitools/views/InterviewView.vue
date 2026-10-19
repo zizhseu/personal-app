@@ -11,7 +11,10 @@
       </div>
     </div>
     <el-alert v-if="demoMode" type="info" :closable="false" show-icon title="当前使用模拟回复演示流程，生成内容不代表真实模型效果" />
-    <el-alert v-if="!llmReady && !statusLoading" type="warning" :closable="false" show-icon title="尚未配置模型服务" description="请在 backend/.env 中配置 LLM_API_KEY、LLM_BASE_URL 和 LLM_MODEL 后重启后端。简历与历史记录仍可正常查看和管理。" />
+    <el-alert v-if="!llmReady && !statusLoading" type="warning" :closable="false" show-icon title="尚未配置可用的模型连接">
+      <template #default>请前往<router-link to="/settings">设置 · 大模型</router-link>填写 API Key 或连接 ChatGPT 账号，选择模型后保存。简历与历史记录仍可正常查看和管理。</template>
+    </el-alert>
+    <p v-if="modelAuthMode === 'chatgpt' && llmReady && !demoMode" class="model-plan-note">正在使用 ChatGPT 套餐 · {{ modelName }} <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">管理用量</a></p>
 
     <div class="interview-grid">
       <section class="workspace" aria-label="面试工作区">
@@ -132,6 +135,8 @@ const targetRole = ref('')
 const focus = ref('')
 const input = ref('')
 const llmReady = ref(false)
+const modelAuthMode = ref('api_key')
+const modelName = ref('')
 const statusLoading = ref(true)
 const demoMode = ref(false)
 const resumesLoading = ref(false)
@@ -207,7 +212,7 @@ watch(resumeId, async (id) => {
 
 onMounted(async () => {
   await Promise.all([loadResumes(), loadHistory()])
-  try { const status = await api.fetchStatus(); llmReady.value = status.llmReady; demoMode.value = !!status.demoMode }
+  try { const status = await api.fetchStatus(); llmReady.value = status.llmReady; demoMode.value = !!status.demoMode; modelAuthMode.value = status.authMode ?? 'api_key'; modelName.value = status.model ?? '' }
   catch { llmReady.value = false }
   finally { statusLoading.value = false }
 })
@@ -318,6 +323,8 @@ async function removeInterview(record: InterviewSummary) {
 .interview-actions, .voice-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .voice-actions .el-button + .el-button { margin-left: 0; }
 .hint { color: var(--ink-3); font-size: 12px; line-height: 1.7; margin: 0; }
+.model-plan-note { margin: 0; font-size: 13px; color: var(--ink-3); }
+.model-plan-note a { color: var(--el-color-primary); margin-left: 8px; }
 .recovery { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
 .history-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .history-count { color: var(--ink-3); font-size: 12px; }

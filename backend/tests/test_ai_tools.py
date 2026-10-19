@@ -7,6 +7,7 @@ from fastapi import HTTPException
 import httpx
 
 from app.modules.aitools import service
+from app.modules.settings.models import ModelConnection
 
 
 class AiCallTests(unittest.IsolatedAsyncioTestCase):
@@ -18,7 +19,9 @@ class AiCallTests(unittest.IsolatedAsyncioTestCase):
             # 使用内存传输，不加载系统代理或证书，也不会发出网络请求。
             return original_client(transport=transport, verify=False, trust_env=False, **kwargs)
 
-        with patch.object(service, "LLM_API_KEY", "local-test-key"), patch.object(
+        with patch.object(service, "current_connection", return_value=ModelConnection(
+            "api_key", "custom", "https://test.invalid/v1", "test-model", api_key="local-test-key"
+        )), patch.object(
             service.httpx, "AsyncClient", side_effect=client
         ):
             return await service.llm_chat([{"role": "user", "content": "测试"}])
