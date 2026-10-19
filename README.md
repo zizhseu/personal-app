@@ -1,6 +1,6 @@
 # 个人 App
 
-本地个人应用，包含秋招投递管理、面试问答、笔试选择题、待办事项和基于简历的 AI 模拟面试。前后端按功能模块组织，菜单和路由由模块注册表生成。
+本地个人应用，包含秋招投递管理、面试问答、笔试选择题、待办事项、基于简历的 AI 模拟面试，以及小红书面经搜索、图片识别和 AI 整理。前后端按功能模块组织，菜单和路由由模块注册表生成。
 
 ## 技术栈
 
@@ -54,6 +54,12 @@ ChatGPT 账号通过官方浏览器授权接入，需要符合官方开放范围
 
 升级本版本时，在项目专用 conda 环境中重新运行 `pip install -r requirements.txt`（从 `backend` 目录），然后重启后端，新表会自动创建。功能契约、数据结构和实测范围见 [简历面试说明](docs/resume-interview.md)。
 
+## 面经资料
+
+在「面经资料 → 搜索与收集」连接本机采集组件，用小红书 App 扫码确认后搜索图文面经。勾选笔记保存正文和图片，执行本地 OCR、人工校对，再用设置中的模型提取附带原文引用的面试问题；确认后可加入问答。也支持直接粘贴正文手动导入。
+
+图片识别需要在项目 conda 环境安装 `backend/requirements-experiences.txt`。采集组件可在界面安装启动，或运行 `python scripts/xhs_collector.py start|status|stop`。安装、搜索策略、保存规则与限制见 [面经功能说明](docs/experiences.md)。
+
 ## 目录结构
 
 ```
@@ -105,3 +111,4 @@ python -m unittest discover -s tests -v
 
 最近一次修复及浏览器实测范围见 [验证记录](docs/validation-2026-10-15.md)。
 模型设置与账号授权的新增验证见 [模型设置验证记录](docs/validation-model-settings-2026-10-19.md)。
+小红书真实搜索、采集、OCR 和面经整理流程的验证见 [面经功能验证记录](docs/validation-experiences-2026-10-19.md)。
