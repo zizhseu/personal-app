@@ -33,6 +33,7 @@
       <el-input
         v-model="keyword"
         placeholder="搜索问题 / 答案"
+        :maxlength="500"
         clearable
         prefix-icon="Search"
         style="width: 240px"
@@ -63,6 +64,7 @@
       >
         <el-option v-for="t in allTags" :key="t" :label="t" :value="t" />
       </el-select>
+      <el-button @click="view.reset()">重置筛选</el-button>
       <span class="spacer" />
       <span v-if="filtered.length > 0" class="select-all">
         <input
@@ -276,8 +278,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, toRefs, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QA_STATUS_LABELS, QA_STATUS_COLORS, sortTags } from '../constants'
@@ -288,9 +290,10 @@ import { useQaStore } from '../store'
 import { useSettingsStore } from '@/modules/settings/store'
 import type { QaItem, QaStatus } from '../types'
 import { markdownToText } from '@/shared/utils/markdown'
+import { useListViewState } from '@/shared/composables/useListViewState'
+import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
 
 const route = useRoute()
-const router = useRouter()
 const store = useQaStore()
 const settings = useSettingsStore()
 
@@ -302,10 +305,12 @@ const categoryName = computed(
 
 onMounted(() => store.ensureLoaded())
 
-const keyword = ref('')
-const filterStatus = ref<QaStatus | ''>('')
-const filterTags = ref<string[]>([])
-const filterExcludeTags = ref<string[]>([])
+const PAGE_SIZE = 5
+const view = useListViewState({
+  q: textField(), status: choiceField<QaStatus | ''>('', ['', 'learning', 'mastered']),
+  tag: listField(), exclude: listField(), page: pageField(),
+}, { routes: ['qa-cat'], ready: () => store.loaded && !store.loading, count: (): number => filtered.value.length, pageSize: PAGE_SIZE })
+const { q: keyword, status: filterStatus, tag: filterTags, exclude: filterExcludeTags, page } = toRefs(view.state)
 
 /** 「含标签」下拉的特殊项：勾选 = 筛出未打标签的题目 */
 const NONE_TAG = '__none__'
@@ -491,14 +496,6 @@ async function confirmImport() {
   }
 }
 
-/** 索引分页：每页 5 条；页码存 store，从详情返回时回到离开时的页 */
-const PAGE_SIZE = 5
-const page = ref(store.listPage)
-
-watch(page, (v) => {
-  store.listPage = v
-})
-
 /** 全部出现过的标签（限定当前分类，去重排序） */
 const allTags = computed(() =>
   [
@@ -569,27 +566,16 @@ const learningCount = computed(
     ).length,
 )
 
-// 切换分类时重置视图状态与选择
+// 浏览条件按分类恢复，批量操作和导入预览始终属于当前分类。
 watch(
   () => route.params.id,
   () => {
-    keyword.value = ''
-    filterStatus.value = ''
-    filterTags.value = []
-    filterExcludeTags.value = []
-    page.value = 1
     selectedIds.value = new Set()
+    batchTagVisible.value = false
+    moveVisible.value = false
+    cancelImport()
   },
 )
-
-// 搜索 / 筛选变化回第一页；数据变化后页码夹紧
-watch([keyword, filterStatus, filterTags, filterExcludeTags], () => {
-  page.value = 1
-})
-watch(filtered, (list) => {
-  const maxPage = Math.max(1, Math.ceil(list.length / PAGE_SIZE))
-  if (page.value > maxPage) page.value = maxPage
-})
 
 function toggleStatus(item: QaItem) {
   void store.patchStatus(item.id, item.status === 'mastered' ? 'learning' : 'mastered')
@@ -603,11 +589,11 @@ function snippet(item: QaItem): string {
 }
 
 function goDetail(item: QaItem) {
-  router.push(`/qa/cat/${item.categoryId}/${item.id}`)
+  void view.navigate(`/qa/cat/${item.categoryId}/${item.id}`)
 }
 
 function goCreate() {
-  router.push(`/qa/cat/${categoryId.value}/new`)
+  void view.navigate(`/qa/cat/${categoryId.value}/new`)
 }
 
 /** 导出整个子模块（分类下全部题目，不受搜索/筛选影响） */

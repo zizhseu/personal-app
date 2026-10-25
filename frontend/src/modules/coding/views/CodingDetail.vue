@@ -121,7 +121,7 @@ const autosave = createAutosave({
     const target = `/coding/cat/${value.categoryId}/${value.id}`
     if (!leaving && route.path !== target) {
       internalRouteTarget = target
-      try { await router.replace(target) } finally { internalRouteTarget = '' }
+      try { await router.replace({ path: target, query: route.query }) } finally { internalRouteTarget = '' }
     }
   },
   failed: (error, snapshot) => {
@@ -180,7 +180,11 @@ async function canLeave(to: { path: string }) {
     return discard
   } finally { leaving = false }
 }
-function listPath() { return `/coding/cat/${item.value?.categoryId ?? Number(route.params.id)}` }
+function listPath() {
+  const from = route.query.from
+  if (typeof from === 'string' && (from === '/coding' || /^\/coding\/cat\/[1-9]\d*$/.test(from))) return from
+  return `/coding/cat/${item.value?.categoryId ?? Number(route.params.id)}`
+}
 function back() { void router.push(listPath()) }
 async function retrySave() { saveError.value = ''; retries = 0; await autosave.flush() }
 async function remove() {

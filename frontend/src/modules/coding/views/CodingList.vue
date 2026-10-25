@@ -8,9 +8,10 @@
     <el-empty v-else-if="invalidCategory" description="分类不存在或已删除"><el-button @click="router.push('/coding')">查看全部题目</el-button></el-empty>
     <template v-else>
       <div class="toolbar">
-        <el-input v-model="keyword" prefix-icon="Search" placeholder="搜索题目 / 标签 / 编程语言" clearable aria-label="搜索手撕题" />
+        <el-input v-model="keyword" prefix-icon="Search" placeholder="搜索题目 / 标签 / 编程语言" :maxlength="500" clearable aria-label="搜索手撕题" />
         <el-select v-model="status" aria-label="筛选掌握状态"><el-option label="全部状态" value="all" /><el-option v-for="(label, value) in statuses" :key="value" :label="label" :value="value" /></el-select>
         <el-select v-model="difficulty" aria-label="筛选题目难度"><el-option label="全部难度" value="all" /><el-option v-for="(label, value) in difficulties" :key="value" :label="label" :value="value" /></el-select>
+        <el-button @click="view.reset()">重置筛选</el-button>
       </div>
       <el-card shadow="never" class="list-card">
         <el-table v-if="filtered.length" :data="paged" @row-click="openItem" class="problem-table">
@@ -30,13 +31,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, toRefs } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useCodingStore } from '../store'
 import { createCategory } from '../actions'
 import { difficulties, statuses, type CodingDifficulty, type CodingStatus, type CodingSummary } from '../types'
+import { useListViewState } from '@/shared/composables/useListViewState'
+import { choiceField, pageField, textField } from '@/shared/state/pageState'
 
 const route = useRoute(), router = useRouter(), store = useCodingStore()
 const categoryId = computed(() => Number(route.params.id) || null)
@@ -44,17 +47,19 @@ const category = computed(() => store.categories.find(row => row.id === category
 const invalidCategory = computed(() => store.loaded && categoryId.value !== null && !category.value)
 const categoryItems = computed(() => store.items.filter(row => categoryId.value === null || row.categoryId === categoryId.value))
 const mastered = computed(() => categoryItems.value.filter(row => row.status === 'mastered').length)
-const keyword = ref(''), status = ref('all'), difficulty = ref('all'), page = ref(1)
+const view = useListViewState({
+  q: textField(), status: choiceField<CodingStatus | 'all'>('all', ['all', 'todo', 'practicing', 'mastered']),
+  difficulty: choiceField<CodingDifficulty | 'all'>('all', ['all', 'easy', 'medium', 'hard']), page: pageField(),
+}, { routes: ['coding-home', 'coding-category'], ready: () => store.loaded && !store.loading, count: (): number => filtered.value.length, pageSize: 10 })
+const { q: keyword, status, difficulty, page } = toRefs(view.state)
 const filtered = computed(() => categoryItems.value.filter(row =>
   (status.value === 'all' || row.status === status.value) && (difficulty.value === 'all' || row.difficulty === difficulty.value)
   && [row.title, row.language, ...row.tags].join(' ').toLowerCase().includes(keyword.value.trim().toLowerCase()),
 ).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id - left.id))
 const paged = computed(() => filtered.value.slice((page.value - 1) * 10, page.value * 10))
 const categoryName = (id: number) => store.categories.find(row => row.id === id)?.name ?? ''
-watch([keyword, status, difficulty, categoryId], () => { page.value = 1 })
-watch(() => filtered.value.length, length => { page.value = Math.min(page.value, Math.max(1, Math.ceil(length / 10))) })
-function openItem(row: CodingSummary) { void router.push(`/coding/cat/${row.categoryId}/${row.id}`) }
-function createItem() { const id = categoryId.value ?? store.categories[0]?.id; if (id) void router.push(`/coding/cat/${id}/new`) }
+function openItem(row: CodingSummary) { void view.navigate({ path: `/coding/cat/${row.categoryId}/${row.id}`, query: { from: route.path } }) }
+function createItem() { const id = categoryId.value ?? store.categories[0]?.id; if (id) void view.navigate({ path: `/coding/cat/${id}/new`, query: { from: route.path } }) }
 async function removeItem(row: CodingSummary) {
   const confirmed = await ElMessageBox.confirm(`删除「${row.title}」及其代码和复盘记录？`, '删除手撕题', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }).then(() => true).catch(() => false)
   if (confirmed) try { await store.remove(row.id) } catch { /* 请求失败时保留列表。 */ }

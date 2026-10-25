@@ -24,7 +24,7 @@
           </div>
         </div>
       </header>
-      <el-main class="main">
+      <el-main ref="mainRegion" class="main">
         <div class="content"><router-view /></div>
       </el-main>
     </el-container>
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from 'vue'
+import { computed, onMounted, provide, ref, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { modules } from '@/modules'
@@ -46,6 +46,7 @@ import { useQuizStore } from '@/modules/quiz/store'
 import { useTodoStore } from '@/modules/todo/store'
 import { useCodingStore } from '@/modules/coding/store'
 import SidebarNavigation from './SidebarNavigation.vue'
+import { pageScrollKey } from '@/shared/composables/useListViewState'
 
 const route = useRoute()
 const store = useJobsStore()
@@ -53,6 +54,8 @@ const qaStore = useQaStore()
 const quizStore = useQuizStore()
 const todoStore = useTodoStore()
 const codingStore = useCodingStore()
+const mainRegion = ref<{ $el: HTMLElement }>()
+provide(pageScrollKey, computed(() => mainRegion.value?.$el ?? null))
 const navigationOpen = ref(false)
 const collapseStorageKey = 'personal-app.sidebar.collapsed-groups.v1'
 const collapsedGroups = ref<string[]>(loadCollapsedGroups())
