@@ -9,8 +9,14 @@ from app.shared.schemas import CamelModel
 
 class SearchInput(CamelModel):
     keyword: str = Field(min_length=1, max_length=100)
-    sort: Literal["综合", "最新", "最多点赞", "最多收藏"] = "综合"
-    period: Literal["不限", "一天内", "一周内", "半年内"] = "不限"
+    platform: str = Field(default="xiaohongshu", min_length=1, max_length=40)
+    sort: str = Field(default="综合", min_length=1, max_length=40)
+    period: str = Field(default="不限", min_length=1, max_length=40)
+
+
+class SourceSelection(CamelModel):
+    model_config = ConfigDict(extra="forbid")
+    provider_id: str = Field(min_length=1, max_length=60)
 
 
 class CollectInput(CamelModel):

@@ -11,18 +11,28 @@
     <nav class="navigation" aria-label="功能导航">
       <section v-for="group in groups" :key="group.key" class="nav-group" :aria-label="group.label">
         <div class="group-heading">
-          <span>{{ group.label }}</span>
+          <button
+            type="button"
+            class="group-toggle"
+            :aria-expanded="!collapsedGroups.includes(group.key)"
+            :aria-controls="`${navigationId}-${group.key}`"
+            @click="emit('toggleGroup', group.key)"
+          >
+            <el-icon class="group-chevron" :class="{ collapsed: collapsedGroups.includes(group.key) }"><ArrowDown /></el-icon>
+            <span>{{ group.label }}</span>
+          </button>
           <button
             v-if="group.creatable && group.onCreate"
             type="button"
             class="icon-button"
             :aria-label="`新增${group.label}分类`"
             title="新增分类"
-            @click="group.onCreate?.()"
+            @click="createGroup(group)"
           >
             <el-icon><Plus /></el-icon>
           </button>
         </div>
+        <div :id="`${navigationId}-${group.key}`" v-show="!collapsedGroups.includes(group.key)">
         <div
           v-for="item in group.items"
           :key="item.path"
@@ -56,6 +66,7 @@
         <p v-if="!group.items.length" class="group-empty">
           {{ group.creatable ? '点击 + 新建分类' : '筹备中，敬请期待' }}
         </p>
+        </div>
       </section>
     </nav>
 
@@ -70,10 +81,11 @@
 </template>
 
 <script setup lang="ts">
-import { FolderOpened } from '@element-plus/icons-vue'
+import { useId } from 'vue'
+import { ArrowDown, FolderOpened } from '@element-plus/icons-vue'
 import type { MenuItem } from '@/shared/types/module'
 
-defineProps<{
+const props = defineProps<{
   groups: {
     key: string
     label: string
@@ -82,9 +94,16 @@ defineProps<{
     items: MenuItem[]
   }[]
   activePath: string
+  collapsedGroups: string[]
 }>()
 
-defineEmits<{ navigate: [] }>()
+const emit = defineEmits<{ navigate: []; toggleGroup: [key: string] }>()
+const navigationId = useId()
+
+function createGroup(group: (typeof props.groups)[number]) {
+  if (props.collapsedGroups.includes(group.key)) emit('toggleGroup', group.key)
+  group.onCreate?.()
+}
 </script>
 
 <style scoped>
@@ -127,6 +146,23 @@ defineEmits<{ navigate: [] }>()
   font-weight: 650;
   letter-spacing: 0.04em;
 }
+.group-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.group-toggle:hover { color: var(--ink); }
+.group-chevron { flex-shrink: 0; font-size: 12px; transition: transform 0.16s ease; }
+.group-chevron.collapsed { transform: rotate(-90deg); }
 .nav-row {
   display: flex;
   align-items: center;

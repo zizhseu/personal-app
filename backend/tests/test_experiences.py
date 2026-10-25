@@ -210,7 +210,7 @@ class ExperienceTests(unittest.TestCase):
                            "status": "failed" if i < 6 else "pending"} for i in range(8)]
             db.commit()
         attempted = []
-        async def download(note_id, index, url):
+        async def download(note_id, index, url, platform="xiaohongshu"):
             attempted.append(index)
             if index < 6:
                 raise HTTPException(502, "图片过期")

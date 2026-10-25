@@ -3,11 +3,12 @@
     <div class="page-head">
       <div>
         <h1>设置</h1>
-        <p class="sub">管理模型连接与应用偏好</p>
+        <p class="sub">管理模型连接、采集来源与应用偏好</p>
       </div>
     </div>
 
     <ModelSettings />
+    <SourceSettings />
 
     <el-card shadow="never" class="block-card">
       <h2 class="preferences-title">应用偏好</h2>
@@ -45,6 +46,7 @@
 import { computed } from 'vue'
 import { useSettingsStore } from '../store'
 import ModelSettings from '../components/ModelSettings.vue'
+import SourceSettings from '@/modules/experiences/components/SourceSettings.vue'
 
 const store = useSettingsStore()
 

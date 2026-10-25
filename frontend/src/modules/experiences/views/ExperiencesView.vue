@@ -1,11 +1,11 @@
 <template>
   <ExperienceDetail v-if="noteId" :key="noteId" :note-id="noteId" @back="back" @deleted="back" />
   <div v-else class="page">
-    <div class="page-head"><div><h1>面经资料</h1><p class="sub">从真实面试经历中整理问题，保留原始材料与引用。</p></div><div class="actions"><el-button icon="Connection" @click="connectionOpen = true">{{ connected ? '小红书已连接' : '连接小红书' }}</el-button><el-button icon="DocumentAdd" @click="manualOpen = true">手动导入</el-button></div></div>
+    <div class="page-head"><div><h1>面经资料</h1><p class="sub">从真实面试经历中整理问题，保留原始材料与引用。</p></div><div class="actions"><el-button icon="Connection" @click="connectionOpen = true">{{ connected ? platformLabel + '已连接' : '连接' + platformLabel }}</el-button><el-button icon="DocumentAdd" @click="manualOpen = true">手动导入</el-button></div></div>
     <el-tabs v-model="tab"><el-tab-pane label="搜索获取" name="search" /><el-tab-pane :label="`本地资料 · ${notes.length}`" name="library" /></el-tabs>
     <template v-if="tab === 'search'">
-      <el-card shadow="never" class="search-card"><el-form class="search-form" @submit.prevent="search"><el-input v-model="query.keyword" aria-label="面经搜索关键词" placeholder="公司、岗位、轮次，例如：字节 AI 应用开发 一面 面经" clearable :disabled="searching || collecting" /><el-select v-model="query.sort" aria-label="搜索排序" :disabled="searching || collecting"><el-option v-for="value in ['综合', '最新', '最多点赞', '最多收藏']" :key="value" :value="value" :label="value" /></el-select><el-select v-model="query.period" aria-label="发布时间" :disabled="searching || collecting"><el-option v-for="value in ['不限', '一天内', '一周内', '半年内']" :key="value" :value="value" :label="value === '不限' ? '不限时间' : value" /></el-select><el-button type="primary" icon="Search" native-type="submit" :loading="searching" :disabled="!query.keyword.trim() || collecting">搜索面经</el-button></el-form><p class="hint">搜索图文笔记，选中后采集正文与图片地址。图片识别和 AI 整理在本地资料中单独进行。</p></el-card>
-      <div v-if="hasSearched" class="result-head"><span>本次返回 {{ hits.length }} 条笔记 <small>不代表全部搜索结果</small></span><el-button type="primary" plain :loading="collecting" :disabled="!selected.length || searching" @click="collect">{{ collecting ? `正在采集 ${collectIndex}/${selected.length}` : `采集已选 ${selected.length} 条` }}</el-button></div>
+      <el-card shadow="never" class="search-card"><div class="source-toolbar"><el-select v-model="query.platform" aria-label="面经来源平台" :disabled="searching || collecting"><el-option v-for="platform in sources.platforms" :key="platform.id" :value="platform.id" :label="platform.label" /></el-select><span>{{ activeProvider?.label ?? '加载来源中…' }}</span><router-link to="/settings">管理采集方式</router-link></div><el-alert v-if="sources.failed" title="来源配置读取失败，请在设置中重新加载" type="error" :closable="false" /><el-form class="search-form" @submit.prevent="search"><el-input v-model="query.keyword" aria-label="面经搜索关键词" placeholder="公司、岗位、轮次，例如：字节 AI 应用开发 一面 面经" clearable :disabled="searching || collecting" /><el-select v-model="query.sort" aria-label="搜索排序" :disabled="searching || collecting"><el-option v-for="value in sorts" :key="value" :value="value" :label="value" /></el-select><el-select v-model="query.period" aria-label="发布时间" :disabled="searching || collecting"><el-option v-for="value in periods" :key="value" :value="value" :label="value === '不限' ? '不限时间' : value" /></el-select><el-button type="primary" icon="Search" native-type="submit" :loading="searching" :disabled="!query.keyword.trim() || collecting || !activeProvider || sources.failed">搜索面经</el-button></el-form><p class="hint">搜索图文笔记，选中后采集正文与图片地址。图片识别和 AI 整理在本地资料中单独进行。</p></el-card>
+      <div v-if="hasSearched" class="result-head"><span>本次返回 {{ hits.length }} 条笔记 <small>{{ resultProvider }} · 不代表全部搜索结果</small></span><el-button type="primary" plain :loading="collecting" :disabled="!selected.length || searching" @click="collect">{{ collecting ? `正在采集 ${collectIndex}/${selected.length}` : `采集已选 ${selected.length} 条` }}</el-button></div>
       <el-alert v-if="collectErrors.length" type="warning" :closable="true" :title="`${collectErrors.length} 条未采集成功，可重新勾选后重试；成功的资料已保存`" />
       <el-checkbox-group v-if="hits.length" v-model="selected" :max="5" class="results"><el-card v-for="hit in hits" :key="hit.id" shadow="never" class="result-card"><div class="cover"><img v-if="hit.cover" :src="hit.cover" alt="笔记封面" loading="lazy" referrerpolicy="no-referrer" /><div v-else class="no-cover"><el-icon><Document /></el-icon></div><el-tag v-if="hit.savedId" class="saved-badge" type="success">已采集</el-tag></div><div class="result-body"><el-checkbox v-if="!hit.savedId" :value="hit.id" :disabled="collecting"><span class="result-title">{{ hit.title }}</span></el-checkbox><strong v-else class="result-title">{{ hit.title }}</strong><div class="result-meta"><span>{{ hit.author || '作者未提供' }}</span><span v-if="hit.likes">{{ hit.likes }} 赞</span></div><el-button v-if="hit.savedId" link type="primary" @click="open(hit.savedId)">查看本地资料</el-button></div></el-card></el-checkbox-group>
       <el-empty v-else :description="hasSearched ? '没有返回相关笔记，试试更具体的公司、岗位或面经关键词' : '输入关键词搜索，或手动导入已有的面经正文'" :image-size="85" />
@@ -13,15 +13,15 @@
     </template>
     <template v-else>
       <div class="library-toolbar"><el-input v-model="filter" placeholder="搜索标题、公司、岗位" prefix-icon="Search" clearable aria-label="筛选本地面经" /><el-button icon="Refresh" @click="loadNotes">刷新资料</el-button></div>
-      <div v-loading="notesLoading" class="library-list"><el-card v-for="note in filteredNotes" :key="note.id" shadow="never" class="library-card" @click="open(note.id)"><div class="library-heading"><h3>{{ note.title }}</h3><el-tag :type="note.workStatus === 'failed' ? 'warning' : note.questionCount ? 'success' : 'info'">{{ note.workStatus === 'pending' ? '正在处理' : note.workStatus === 'failed' ? '处理未完成' : note.questionCount ? `${note.questionCount} 道题` : '待整理' }}</el-tag></div><p>{{ [note.company, note.position, note.author].filter(Boolean).join(' · ') || (note.platform === 'manual' ? '手动导入' : '小红书面经') }}</p><div class="library-meta"><span>{{ note.imageCount }} 张图片 · {{ dayjs(note.updatedAt).format('MM-DD HH:mm') }}</span><el-button link type="primary">查看与整理 →</el-button></div></el-card><el-empty v-if="!filteredNotes.length" description="还没有面经资料，先搜索采集或手动导入" :image-size="85" /></div>
+      <div v-loading="notesLoading" class="library-list"><el-card v-for="note in filteredNotes" :key="note.id" shadow="never" class="library-card" @click="open(note.id)"><div class="library-heading"><h3>{{ note.title }}</h3><el-tag :type="note.workStatus === 'failed' ? 'warning' : note.questionCount ? 'success' : 'info'">{{ note.workStatus === 'pending' ? '正在处理' : note.workStatus === 'failed' ? '处理未完成' : note.questionCount ? `${note.questionCount} 道题` : '待整理' }}</el-tag></div><p>{{ [note.company, note.position, note.author].filter(Boolean).join(' · ') || (note.platform === 'manual' ? '手动导入' : platformName(note.platform)) }}</p><div class="library-meta"><span>{{ note.imageCount }} 张图片 · {{ dayjs(note.updatedAt).format('MM-DD HH:mm') }}</span><el-button link type="primary">查看与整理 →</el-button></div></el-card><el-empty v-if="!filteredNotes.length" description="还没有面经资料，先搜索采集或手动导入" :image-size="85" /></div>
     </template>
-    <CollectorConnection v-model="connectionOpen" @connected="connected = true" />
+    <CollectorConnection v-model="connectionOpen" :platform="query.platform" :provider-id="activeProvider?.id" @connected="connected = true" />
     <el-dialog v-model="manualOpen" title="手动导入面经" width="min(760px, calc(100vw - 32px))" :close-on-click-modal="false"><el-form label-position="top" @submit.prevent="saveManual"><el-form-item label="资料标题"><el-input v-model="manual.title" :maxlength="300" /></el-form-item><el-form-item label="来源链接（可选）"><el-input v-model="manual.sourceUrl" placeholder="保留来源，便于以后核对" /></el-form-item><el-form-item label="面经正文"><el-input v-model="manual.content" type="textarea" :rows="12" :maxlength="60000" show-word-limit placeholder="粘贴你已经获取的面经文字，保存后可用 AI 整理" /></el-form-item></el-form><template #footer><el-button @click="manualOpen = false">取消</el-button><el-button type="primary" :loading="importing" :disabled="!manual.title.trim() || !manual.content.trim()" @click="saveManual">保存资料</el-button></template></el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -30,22 +30,35 @@ import * as api from '../api'
 import type { NoteSummary, SearchHit } from '../types'
 import CollectorConnection from '../components/CollectorConnection.vue'
 import ExperienceDetail from '../components/ExperienceDetail.vue'
+import { useSourceStore } from '../sourceStore'
+const sources = useSourceStore()
 const route = useRoute(), router = useRouter()
 const noteId = computed(() => { const id = Number(route.query.note); return Number.isInteger(id) && id > 0 ? id : null })
 const tab = computed({ get: () => route.query.tab === 'library' ? 'library' : 'search', set: value => { void router.replace({ path: '/experiences', query: value === 'library' ? { tab: value } : {} }) } })
-const query = reactive({ keyword: '', sort: '综合', period: '不限' })
+const query = reactive({ keyword: '', sort: '综合', period: '不限', platform: 'xiaohongshu' })
+const activeProvider = computed(() => sources.active(query.platform))
+const platformLabel = computed(() => sources.platforms.find(value => value.id === query.platform)?.label ?? '来源')
+const platformName = (id: string) => sources.platforms.find(value => value.id === id)?.label ?? id
+const sorts = computed(() => activeProvider.value?.capabilities.sorts ?? ['综合'])
+const periods = computed(() => activeProvider.value?.capabilities.periods ?? ['不限'])
+const resultProvider = ref('')
 const searching = ref(false), collecting = ref(false), hasSearched = ref(false), importing = ref(false), notesLoading = ref(false)
 const collectIndex = ref(0), hits = ref<SearchHit[]>([]), selected = ref<string[]>([]), collectErrors = ref<string[]>([])
 const notes = ref<NoteSummary[]>([]), filter = ref(''), connectionOpen = ref(false), manualOpen = ref(false), connected = ref(false)
 const manual = reactive({ title: '', sourceUrl: '', content: '' })
 const filteredNotes = computed(() => { const keyword = filter.value.trim().toLowerCase(); return notes.value.filter(note => [note.title, note.company, note.position].join(' ').toLowerCase().includes(keyword)) })
 async function loadNotes() { notesLoading.value = true; try { notes.value = await api.fetchNotes() } catch { /* 已有列表保留。 */ } finally { notesLoading.value = false } }
-async function search() { searching.value = true; try { const result = await api.searchNotes(query); hits.value = result.items; selected.value = []; hasSearched.value = true; collectErrors.value = [] } catch { /* 保留上次结果。 */ } finally { searching.value = false } }
+async function search() { searching.value = true; try { await sources.load(true); const provider = sources.active(query.platform); if (!provider || sources.failed) return; if (!provider.capabilities.sorts.includes(query.sort)) query.sort = provider.capabilities.sorts[0] ?? '综合'; if (!provider.capabilities.periods.includes(query.period)) query.period = provider.capabilities.periods[0] ?? '不限'; const result = await api.searchNotes({ ...query }); hits.value = result.items; resultProvider.value = sources.platforms.flatMap(platform => platform.providers).find(provider => provider.id === result.providerId)?.label ?? result.providerId; selected.value = []; hasSearched.value = true; collectErrors.value = [] } catch { /* 保留上次结果。 */ } finally { searching.value = false } }
 async function collect() { collecting.value = true; collectErrors.value = []; collectIndex.value = 0; const ids = [...selected.value]; for (const id of ids) { ++collectIndex.value; try { const note = await api.collectNote(id); const hit = hits.value.find(item => item.id === id); if (hit) hit.savedId = note.id } catch { collectErrors.value.push(id) } }; selected.value = [...collectErrors.value]; collecting.value = false; await loadNotes(); if (ids.length > collectErrors.value.length) ElMessage.success(`已保存 ${ids.length - collectErrors.value.length} 条，可到本地资料核对和整理`) }
 async function open(id: number) { await router.push({ path: '/experiences', query: { note: id } }) }
 async function back() { await router.push({ path: '/experiences', query: { tab: 'library' } }); await loadNotes() }
 async function saveManual() { importing.value = true; try { const note = await api.importManual(manual); manualOpen.value = false; Object.assign(manual, { title: '', sourceUrl: '', content: '' }); await loadNotes(); await open(note.id); ElMessage.success(note.alreadySaved ? '相同正文已保存，已打开已有资料' : '面经资料已保存') } catch { /* 保留输入。 */ } finally { importing.value = false } }
-onMounted(loadNotes)
+watch(() => activeProvider.value?.id, () => {
+  connected.value = false
+  if (!sorts.value.includes(query.sort)) query.sort = sorts.value[0] ?? '综合'
+  if (!periods.value.includes(query.period)) query.period = periods.value[0] ?? '不限'
+})
+onMounted(() => { void loadNotes(); void sources.load(true) })
 </script>
 
 <style scoped>
@@ -56,6 +69,7 @@ h1 { margin: 0; color: var(--ink); font-size: 21px; }
 .actions .el-button + .el-button { margin-left: 0; }
 .hint { color: var(--ink-3); font-size: 12px; line-height: 1.8; margin: 10px 0 0; }
 .search-card, .result-card, .library-card { border-radius: var(--radius-card); }
+.source-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; font-size: 12px; color: var(--ink-3); } .source-toolbar .el-select { width: 140px; } .source-toolbar a { color: var(--accent); text-decoration: none; margin-left: auto; }
 .search-form { display: grid; grid-template-columns: minmax(240px, 1fr) 125px 130px auto; gap: 12px; }
 .result-head { font-size: 14px; color: var(--ink-2); }
 .result-head small { color: var(--ink-3); margin-left: 10px; }

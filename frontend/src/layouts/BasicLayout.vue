@@ -1,6 +1,6 @@
 <template>
   <el-container class="layout" direction="horizontal">
-    <SidebarNavigation class="desktop-sidebar" :groups="groups" :active-path="activePath" />
+    <SidebarNavigation class="desktop-sidebar" :groups="groups" :active-path="activePath" :collapsed-groups="collapsedGroups" @toggle-group="toggleGroup" />
     <el-container class="workspace" direction="vertical">
       <header class="topbar">
         <div class="page-location">
@@ -29,7 +29,7 @@
       </el-main>
     </el-container>
     <el-drawer v-model="navigationOpen" title="功能导航" direction="ltr" size="264px" destroy-on-close class="navigation-drawer">
-      <SidebarNavigation :groups="groups" :active-path="activePath" @navigate="navigationOpen = false" />
+      <SidebarNavigation :groups="groups" :active-path="activePath" :collapsed-groups="collapsedGroups" @toggle-group="toggleGroup" @navigate="navigationOpen = false" />
     </el-drawer>
   </el-container>
 </template>
@@ -44,6 +44,7 @@ import { useJobsStore } from '@/modules/jobs/store'
 import { useQaStore } from '@/modules/qa/store'
 import { useQuizStore } from '@/modules/quiz/store'
 import { useTodoStore } from '@/modules/todo/store'
+import { useCodingStore } from '@/modules/coding/store'
 import SidebarNavigation from './SidebarNavigation.vue'
 
 const route = useRoute()
@@ -51,14 +52,36 @@ const store = useJobsStore()
 const qaStore = useQaStore()
 const quizStore = useQuizStore()
 const todoStore = useTodoStore()
+const codingStore = useCodingStore()
 const navigationOpen = ref(false)
+const collapseStorageKey = 'personal-app.sidebar.collapsed-groups.v1'
+const collapsedGroups = ref<string[]>(loadCollapsedGroups())
 const today = dayjs().format('M月D日 dddd')
+
+function loadCollapsedGroups(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(collapseStorageKey) ?? '[]')
+    return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function toggleGroup(key: string) {
+  collapsedGroups.value = collapsedGroups.value.includes(key)
+    ? collapsedGroups.value.filter(value => value !== key)
+    : [...collapsedGroups.value, key]
+  try {
+    localStorage.setItem(collapseStorageKey, JSON.stringify(collapsedGroups.value))
+  } catch { /* 浏览器禁止存储时，本次打开期间仍可折叠。 */ }
+}
 
 onMounted(() => {
   void store.ensureLoaded()
   void qaStore.ensureLoaded()
   void quizStore.ensureLoaded()
   void todoStore.ensureLoaded()
+  void codingStore.ensureLoaded()
 })
 
 watch(() => route.path, () => { navigationOpen.value = false })

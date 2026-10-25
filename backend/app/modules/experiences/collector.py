@@ -83,7 +83,7 @@ def _cover(card: dict) -> str:
     return image_url(value.get("urlDefault") or value.get("url") or value.get("urlPre") or "")
 
 
-async def search(keyword: str, sort: str, period: str) -> dict:
+async def mcp_search(keyword: str, sort: str, period: str) -> dict:
     result = await call("POST", "/api/v1/feeds/search", {"keyword": keyword.strip(), "filters": {
         "sort_by": sort, "publish_time": period, "note_type": "图文"}})
     feeds = result.get("feeds")
@@ -114,7 +114,7 @@ async def search(keyword: str, sort: str, period: str) -> dict:
     return {"items": hits, "keyword": keyword, "expiresIn": 1800}
 
 
-async def detail(result_id: str) -> dict:
+async def mcp_detail(result_id: str) -> dict:
     record = private_store.read_document(SEARCH_FILE).get(result_id)
     if not record or record.get("expires", 0) < time.time():
         raise HTTPException(410, "搜索结果已过期，请重新搜索后采集")
@@ -139,3 +139,16 @@ async def detail(result_id: str) -> dict:
                 "raw_body": note.get("desc", "")[:60000], "published_at": published_at, "images": images}
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError, OSError):
         raise HTTPException(502, "笔记详情不完整或与搜索结果不匹配，请重新搜索") from None
+
+
+async def search(keyword: str, sort: str, period: str, platform: str = "xiaohongshu") -> dict:
+    from .sources.service import search as unified_search
+    return await unified_search(keyword, sort, period, platform)
+
+
+async def detail(result_id: str) -> dict:
+    from .sources.service import detail as unified_detail, RESULTS_FILE
+    # 保留升级前尚在有效期内的 MCP 搜索引用。
+    if result_id not in private_store.read_document(RESULTS_FILE):
+        return await mcp_detail(result_id)
+    return await unified_detail(result_id)

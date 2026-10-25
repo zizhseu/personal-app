@@ -15,7 +15,7 @@
 
 ## 搜索策略与边界
 
-搜索通过本机运行的 [xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp) 完成：在扫码登录的独立浏览器中打开小红书搜索页，读取页面已加载的搜索结果与笔记详情。不是通用官方搜索 API，也没有实现 AI 自动规划关键词或多轮补充检索。
+默认的浏览器方式通过本机运行的 [xiaohongshu-mcp](https://github.com/xpzouying/xiaohongshu-mcp) 完成：在扫码登录的独立浏览器中打开小红书搜索页，读取页面已加载的搜索结果与笔记详情。也可在设置中改选 [xiaohongshu-cli](https://github.com/jackwener/xiaohongshu-cli) 的接口方式，能力差异和分别登录的说明见 [内容来源](content-sources.md)。两种方式均不属于官方开放搜索 API，也没有实现 AI 自动规划关键词或多轮补充检索。
 
 - 当前使用平台自身的排序与筛选，读取一批已加载结果，适配器最多处理 40 张卡片；返回数量不代表全部相关内容。本次实测返回 20 条。
 - 仅搜索图文笔记，不做视频转写、全量翻页或评论分析。详情接口限制评论数量，评论不进入本应用的面经材料与模型输入。

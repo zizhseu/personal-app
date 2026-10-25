@@ -212,7 +212,7 @@ async def recognize_images(db: Session, note_id: int, request_id: str) -> dict:
                     break
                 processed += 1
                 try:
-                    data = await ocr.download(note_id, index, image["url"])
+                    data = await ocr.download(note_id, index, image["url"], platform=row.platform)
                     result = await run_in_threadpool(ocr.recognize, data)
                     await run_in_threadpool(ocr.store_image, note_id, index, data)
                     image.update(status="done", error=None, confidence=result["confidence"], stored=True)

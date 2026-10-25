@@ -1,6 +1,13 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** 自动保存等后台请求在页面内呈现错误，避免重复弹窗。 */
+    silentError?: boolean
+  }
+}
+
 /** 后端模型调用最多等待 120 秒，另预留 10 秒用于接口处理和传输。 */
 export const AI_REQUEST_TIMEOUT_MS = 130_000
 
@@ -27,7 +34,7 @@ request.interceptors.response.use(
       const loc = (first.loc ?? []).filter((p: unknown) => p !== 'body').join('.')
       msg = `参数错误${loc ? `（${loc}）` : ''}：${first.msg}`
     }
-    ElMessage.error(msg)
+    if (!error.config?.silentError) ElMessage.error(msg)
     return Promise.reject(error)
   },
 )

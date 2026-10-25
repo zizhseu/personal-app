@@ -1,0 +1,5 @@
+# 可选的小红书接口采集器；应用不依赖 references/ 中的检出目录。
+xiaohongshu-cli==0.6.4
+camoufox==0.5.8
+Pillow>=10.0
+pywin32>=306; sys_platform == "win32"

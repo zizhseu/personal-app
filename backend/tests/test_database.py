@@ -33,6 +33,8 @@ class DatabaseInitializationTests(unittest.TestCase):
         database.init_db()
         database.init_db()
         self.assertIn("todo_item", inspect(self.engine).get_table_names())
+        self.assertIn("coding_category", inspect(self.engine).get_table_names())
+        self.assertIn("coding_item", inspect(self.engine).get_table_names())
         self.assertNotIn("location", {c["name"] for c in inspect(self.engine).get_columns("application")})
         with self.engine.connect() as connection:
             self.assertEqual(connection.scalar(text("SELECT COUNT(*) FROM qa_category")), 3)

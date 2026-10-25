@@ -6,7 +6,8 @@ from fastapi import HTTPException
 import httpx
 
 from app.core import config
-from app.modules.experiences.collector import image_url
+from app.modules.experiences.sources.assets import image_url
+from app.modules.experiences.sources.registry import get_platform
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 _engine = None
@@ -23,18 +24,18 @@ def image_path(note_id: int, index: int):
     return config.DATA_DIR / "experience-images" / f"{note_id}-{index}.bin"
 
 
-async def download(note_id: int, index: int, url: str) -> bytes:
+async def download(note_id: int, index: int, url: str, platform: str = "xiaohongshu") -> bytes:
     # 已成功识别的图片由业务状态跳过。重试时重新获取，避免删除资料后
     # SQLite 主键复用而误用旧缓存，也不会把旧图片文字写入另一篇笔记。
-    target = image_url(url)
+    target = image_url(url, platform)
     if not target:
         raise HTTPException(422, "图片地址无效，请打开原笔记核对")
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(25, connect=5), follow_redirects=False) as client:
             for _ in range(3):
-                async with client.stream("GET", target, headers={"Referer": "https://www.xiaohongshu.com/"}) as response:
+                async with client.stream("GET", target, headers={"Referer": get_platform(platform).referer}) as response:
                     if response.is_redirect:
-                        target = image_url(str(response.url.join(response.headers.get("location", ""))))
+                        target = image_url(str(response.url.join(response.headers.get("location", ""))), platform)
                         if not target:
                             raise HTTPException(422, "图片跳转到不支持的地址")
                         continue

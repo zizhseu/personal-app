@@ -1,14 +1,17 @@
 import request, { AI_REQUEST_TIMEOUT_MS } from '@/shared/api/request'
-import type { CollectorConnection, ExperienceNote, MaterialSource, NoteSummary, SearchHit } from './types'
+import type { CollectorConnection, ExperienceNote, MaterialSource, NoteSummary, SearchHit, SourceContext, SourceCatalogue } from './types'
 
 const root = '/experiences'
-export const fetchConnection = () => request.get(`${root}/connection`) as Promise<CollectorConnection>
-export const saveConnection = (data: { url: string; token?: string; clearToken: boolean }) => request.put(`${root}/connection`, data) as Promise<CollectorConnection>
-export const startCollector = () => request.post(`${root}/connection/start`) as Promise<{ started: boolean; message: string }>
-export const fetchStartupStatus = () => request.get(`${root}/connection/start-status`) as Promise<{ status: string; message: string }>
-export const fetchLogin = () => request.get(`${root}/login`, { timeout: 110_000 }) as Promise<{ loggedIn: boolean }>
-export const fetchQr = () => request.post(`${root}/login/qrcode`, {}, { timeout: 110_000 }) as Promise<{ loggedIn: boolean; image: string; timeout: string }>
-export const searchNotes = (data: { keyword: string; sort: string; period: string }) => request.post(`${root}/search`, data, { timeout: 110_000 }) as Promise<{ items: SearchHit[]; keyword: string; expiresIn: number }>
+const sourceRoot = (source: SourceContext) => `${root}/sources/${encodeURIComponent(source.platform)}/${encodeURIComponent(source.providerId)}`
+export const fetchSources = () => request.get(`${root}/sources`) as Promise<SourceCatalogue>
+export const selectSource = (platform: string, providerId: string) => request.put(`${root}/sources/${encodeURIComponent(platform)}`, { providerId }) as Promise<SourceCatalogue>
+export const fetchConnection = (source: SourceContext) => request.get(`${sourceRoot(source)}/connection`) as Promise<CollectorConnection>
+export const saveConnection = (source: SourceContext, data: { url: string; token?: string; clearToken: boolean }) => request.put(`${sourceRoot(source)}/connection`, data) as Promise<CollectorConnection>
+export const startCollector = (source: SourceContext) => request.post(`${sourceRoot(source)}/start`) as Promise<{ started: boolean; message: string }>
+export const fetchStartupStatus = (source: SourceContext) => request.get(`${sourceRoot(source)}/start-status`) as Promise<{ status: string; message: string }>
+export const fetchLogin = (source: SourceContext, quiet = false) => request.get(`${sourceRoot(source)}/login`, { timeout: quiet ? 30_000 : 110_000, silentError: quiet }) as Promise<{ loggedIn: boolean }>
+export const fetchQr = (source: SourceContext) => request.post(`${sourceRoot(source)}/login/qrcode`, {}, { timeout: 110_000 }) as Promise<{ loggedIn: boolean; image: string; timeout: string }>
+export const searchNotes = (data: { keyword: string; sort: string; period: string; platform: string }) => request.post(`${root}/search`, data, { timeout: 110_000 }) as Promise<{ items: SearchHit[]; keyword: string; expiresIn: number; platform: string; providerId: string }>
 export const collectNote = (resultId: string) => request.post(`${root}/collect`, { resultId }, { timeout: 110_000 }) as Promise<ExperienceNote>
 export const importManual = (data: { title: string; content: string; sourceUrl: string }) => request.post(`${root}/manual`, data) as Promise<ExperienceNote>
 export const fetchNotes = () => request.get(`${root}/notes`) as Promise<NoteSummary[]>

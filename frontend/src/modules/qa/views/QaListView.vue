@@ -14,6 +14,15 @@
           hidden
           @change="onFileChange"
         />
+        <el-dropdown trigger="click" @command="onExport">
+          <el-button icon="Download">导出</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="md">导出 Markdown（.md）</el-dropdown-item>
+              <el-dropdown-item command="pdf">导出 PDF（打印视图）</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button icon="Upload" @click="fileInput?.click()">导入</el-button>
         <el-button type="primary" icon="Plus" @click="goCreate">新增问题</el-button>
       </div>
@@ -273,6 +282,7 @@ import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QA_STATUS_LABELS, QA_STATUS_COLORS, sortTags } from '../constants'
 import { parseQaMarkdown, type ParsedQa } from '../importer'
+import { exportCategoryMarkdown, exportCategoryPdf } from '../export'
 import * as api from '../api'
 import { useQaStore } from '../store'
 import { useSettingsStore } from '@/modules/settings/store'
@@ -598,6 +608,25 @@ function goDetail(item: QaItem) {
 
 function goCreate() {
   router.push(`/qa/cat/${categoryId.value}/new`)
+}
+
+/** 导出整个子模块（分类下全部题目，不受搜索/筛选影响） */
+function onExport(format: string) {
+  const items = store.items.filter((i) => i.categoryId === categoryId.value)
+  if (!items.length) {
+    ElMessage.warning('当前分类还没有题目可导出')
+    return
+  }
+  if (format === 'md') {
+    exportCategoryMarkdown(categoryName.value, items)
+    ElMessage.success(`已导出 ${items.length} 条题目为 Markdown`)
+  } else {
+    try {
+      exportCategoryPdf(categoryName.value, items)
+    } catch (e) {
+      ElMessage.warning(e instanceof Error ? e.message : '导出失败')
+    }
+  }
 }
 </script>
 

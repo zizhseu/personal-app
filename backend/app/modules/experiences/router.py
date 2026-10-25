@@ -8,11 +8,58 @@ from app.core.database import get_db
 from app.modules.experiences import collector, launcher, ocr, service
 from threading import Lock
 from app.modules.experiences.models import ExperienceNote
-from app.modules.experiences.schemas import CollectInput, ExportInput, ManualInput, MaterialInput, SearchInput, WorkInput
+from app.modules.experiences.schemas import CollectInput, ExportInput, ManualInput, MaterialInput, SearchInput, WorkInput, SourceSelection
+from app.modules.experiences.sources import registry
 from app.modules.settings.router import local_only
 
 router = APIRouter(prefix="/api/experiences", tags=["面经资料"], dependencies=[Depends(local_only)])
 _start_lock = Lock()
+
+
+@router.get("/sources")
+def list_sources():
+    return registry.catalogue()
+
+
+@router.put("/sources/{platform}")
+def select_source(platform: str, data: SourceSelection):
+    return registry.select_provider(platform, data.provider_id)
+
+
+@router.get("/sources/{platform}/{provider_id}/connection")
+def source_connection(platform: str, provider_id: str):
+    return {**registry.provider(platform, provider_id).connection(), "ocrReady": ocr.available()}
+
+
+@router.put("/sources/{platform}/{provider_id}/connection")
+def save_source_connection(platform: str, provider_id: str, data: dict):
+    return registry.provider(platform, provider_id).save_connection(data)
+
+
+@router.post("/sources/{platform}/{provider_id}/start")
+async def source_start(platform: str, provider_id: str):
+    selected = registry.provider(platform, provider_id)
+    if not selected.capabilities.managed_install:
+        raise HTTPException(405, "此采集方式不支持一键安装，请按来源说明配置")
+    return await selected.start()
+
+
+@router.get("/sources/{platform}/{provider_id}/start-status")
+def source_start_status(platform: str, provider_id: str):
+    return registry.provider(platform, provider_id).startup_status()
+
+
+@router.get("/sources/{platform}/{provider_id}/login")
+async def source_login_status(platform: str, provider_id: str):
+    return await registry.provider(platform, provider_id).login_status()
+
+
+@router.post("/sources/{platform}/{provider_id}/login/qrcode")
+async def source_login_qrcode(platform: str, provider_id: str):
+    selected = registry.provider(platform, provider_id)
+    if not selected.capabilities.qr_login:
+        raise HTTPException(405, "此采集方式不支持扫码，请按来源说明登录")
+    return await selected.login_qrcode()
 
 
 @router.get("/connection")
@@ -76,8 +123,8 @@ async def login_qrcode():
 async def search(data: SearchInput, db: Session = Depends(get_db)):
     if not data.keyword.strip():
         raise HTTPException(422, "请输入搜索关键词")
-    result = await collector.search(data.keyword, data.sort, data.period)
-    saved = {note.source_id: note.id for note in db.scalars(select(ExperienceNote).where(ExperienceNote.platform == "xiaohongshu"))}
+    result = await collector.search(data.keyword, data.sort, data.period, data.platform)
+    saved = {note.source_id: note.id for note in db.scalars(select(ExperienceNote).where(ExperienceNote.platform == data.platform))}
     for item in result["items"]:
         item["savedId"] = saved.get(item["sourceId"])
     return result
