@@ -6,7 +6,7 @@
           <span class="title">{{ app.company }}{{ app.position ? ` · ${app.position}` : '' }}</span>
           <el-dropdown
             trigger="click"
-            @command="(s: ApplicationStatus) => store.quickSetStatus(app.id, s)"
+            @command="quickSetStatus"
           >
             <span class="status-trigger" title="点击修改状态">
               <StatusTag :status="app.status" />
@@ -153,7 +153,7 @@
             <!-- 二级目录：该状态期间发生的轮次结果变化 -->
             <div v-if="expandedHistory.has(h.id)" class="result-changes">
               <div v-for="rc in resultChangesOf(h)" :key="rc.id" class="result-change-row">
-                <span class="rc-round">{{ ROUND_TYPE_LABELS[rc.roundType] }}</span>
+                <span class="rc-round">{{ roundTypeLabel(rc.roundType) }}</span>
                 <el-tag
                   size="small"
                   effect="dark"
@@ -196,7 +196,7 @@ import RoundFormDialog from '../components/RoundFormDialog.vue'
 import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS, STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { formatDateTime } from '@/shared/utils/format'
 import { useJobsStore } from '../store'
-import type { ApplicationStatus, InterviewRound, RoundResultChange, StatusHistory } from '../types'
+import type { ApplicationStatus, InterviewRound, RoundResultChange, RoundType, StatusHistory } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -211,6 +211,14 @@ onMounted(() => store.ensureLoaded())
 const app = computed(() =>
   store.applications.find((a) => a.id === Number(route.params.id)),
 )
+
+async function quickSetStatus(status: ApplicationStatus) {
+  if (app.value) await store.quickSetStatus(app.value.id, status)
+}
+
+function roundTypeLabel(type: string): string {
+  return type in ROUND_TYPE_LABELS ? ROUND_TYPE_LABELS[type as RoundType] : type
+}
 
 function timelineType(result: InterviewRound['result']): 'primary' | 'success' | 'danger' {
   if (result === 'passed') return 'success'

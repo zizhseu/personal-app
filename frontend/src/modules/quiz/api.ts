@@ -1,4 +1,4 @@
-import request from '@/shared/api/request'
+import request, { AI_REQUEST_TIMEOUT_MS } from '@/shared/api/request'
 import type { ParsedQuiz, QuizCategory, QuizItem, QuizPayload } from './types'
 
 /** quiz 模块全部接口调用 */
@@ -37,5 +37,5 @@ export function deleteItem(id: number): Promise<void> {
 
 /** AI 解析导入：原文 → 候选题目列表（不入库） */
 export function parseQuiz(text: string): Promise<{ questions: ParsedQuiz[] }> {
-  return request.post('/quiz/parse', { text }) as Promise<{ questions: ParsedQuiz[] }>
+  return request.post('/quiz/parse', { text }, { timeout: AI_REQUEST_TIMEOUT_MS }) as Promise<{ questions: ParsedQuiz[] }>
 }

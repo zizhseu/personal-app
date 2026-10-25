@@ -375,14 +375,14 @@ const categoryItems = computed(() =>
 const prevItem = computed(() => {
   if (!item.value) return null
   const idx = categoryItems.value.findIndex((i) => i.id === item.value!.id)
-  return idx > 0 ? categoryItems.value[idx - 1] : null
+  return idx > 0 ? categoryItems.value[idx - 1] ?? null : null
 })
 
 const nextItem = computed(() => {
   if (!item.value) return null
   const idx = categoryItems.value.findIndex((i) => i.id === item.value!.id)
   return idx >= 0 && idx < categoryItems.value.length - 1
-    ? categoryItems.value[idx + 1]
+    ? categoryItems.value[idx + 1] ?? null
     : null
 })
 
@@ -413,7 +413,7 @@ function letter(i: number): string {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 960px;
+  min-width: 0;
 }
 
 .header {
@@ -683,5 +683,13 @@ function letter(i: number): string {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .head-line, .meta-row { flex-wrap: wrap; }
+  .meta-row .el-button + .el-button { margin-left: 0; }
+  .meta-row .spacer { display: none; }
+  .q-text { min-width: 0; overflow-wrap: anywhere; }
+  .option-list { padding-left: 0; }
 }
 </style>

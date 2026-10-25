@@ -45,6 +45,11 @@ def init_db() -> None:
 
     # 老库补列（create_all 不会给已有表加列；ALTER 幂等：列已存在则跳过）
     with engine.connect() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS _migration_flags (name TEXT PRIMARY KEY)"))
+        timezone_migration_pending = conn.execute(
+            text("SELECT COUNT(*) FROM _migration_flags WHERE name = 'tz_local_20260915'")
+        ).scalar() == 0
+
         cols = [row[1] for row in conn.execute(text("PRAGMA table_info(application)"))]
         if "url" not in cols:
             conn.execute(text("ALTER TABLE application ADD COLUMN url VARCHAR(500)"))
@@ -60,12 +65,17 @@ def init_db() -> None:
         import json as _json
         import re as _re
 
-        rows = conn.execute(
-            text(
-                "SELECT id, location FROM application "
-                "WHERE base IS NULL AND location IS NOT NULL AND TRIM(location) != ''"
-            )
-        ).all()
+        # 新库已不包含旧 location 列，仅在旧列实际存在时迁移。
+        rows = (
+            conn.execute(
+                text(
+                    "SELECT id, location FROM application "
+                    "WHERE base IS NULL AND location IS NOT NULL AND TRIM(location) != ''"
+                )
+            ).all()
+            if "location" in cols
+            else []
+        )
         for rid, loc in rows:
             cities = [c.strip() for c in _re.split(r"[/、,，;；\s]+", loc) if c.strip()]
             if cities:
@@ -101,8 +111,13 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE qa_item ADD COLUMN category_id INTEGER"))
             conn.commit()
         if conn.execute(text("SELECT COUNT(*) FROM qa_category")).scalar() == 0:
+            # 原生 SQL 不会触发 ORM 的时间默认值；未迁移的库先写 UTC，随后统一修正。
+            seed_time = "CURRENT_TIMESTAMP" if timezone_migration_pending else "datetime('now', 'localtime')"
             for name in ("简历项目", "后端/中间件", "Agent"):
-                conn.execute(text("INSERT INTO qa_category (name) VALUES (:name)"), {"name": name})
+                conn.execute(
+                    text(f"INSERT INTO qa_category (name, created_at, updated_at) VALUES (:name, {seed_time}, {seed_time})"),
+                    {"name": name},
+                )
             conn.commit()
         # 旧 category 字符串（resume/backend/agent）→ 分类 id 一次性回填
         if qa_cols and "category" in qa_cols:
@@ -130,6 +145,7 @@ def init_db() -> None:
                         question VARCHAR(500) NOT NULL,
                         answer TEXT,
                         tags JSON,
+                        related_ids JSON,
                         status VARCHAR(20) NOT NULL,
                         last_read_at DATETIME,
                         created_at DATETIME DEFAULT (CURRENT_TIMESTAMP),
@@ -141,10 +157,10 @@ def init_db() -> None:
             conn.execute(
                 text(
                     """
-                    INSERT INTO qa_item_new (id, category_id, question, answer, tags, status, last_read_at, created_at, updated_at)
+                    INSERT INTO qa_item_new (id, category_id, question, answer, tags, related_ids, status, last_read_at, created_at, updated_at)
                     SELECT id,
                            COALESCE(category_id, (SELECT MIN(id) FROM qa_category)),
-                           question, answer, tags, status, last_read_at, created_at, updated_at
+                           question, answer, tags, related_ids, status, last_read_at, created_at, updated_at
                     FROM qa_item
                     """
                 )
@@ -231,15 +247,7 @@ def init_db() -> None:
         # 时区修正：SQLite 的 CURRENT_TIMESTAMP（func.now()）为 UTC，历史上由 server_default
         # 生成的 created_at/updated_at/changed_at 均为 UTC 时间，统一 +8h 修正为本地时间。
         # 一次性执行（标记表防重跑）；结果历史的回填行已是本地时间（ISO 带 T 格式），跳过。
-        conn.execute(
-            text("CREATE TABLE IF NOT EXISTS _migration_flags (name TEXT PRIMARY KEY)")
-        )
-        if (
-            conn.execute(
-                text("SELECT COUNT(*) FROM _migration_flags WHERE name = 'tz_local_20260915'")
-            ).scalar()
-            == 0
-        ):
+        if timezone_migration_pending:
             for col in ("created_at", "updated_at"):
                 for table in (
                     "application",

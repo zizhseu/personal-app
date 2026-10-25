@@ -1,14 +1,14 @@
 """quiz 模块业务逻辑：分类 / 题目 / AI 解析导入。"""
-import json
 import re
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.aitools.service import llm_chat
 from app.modules.quiz.models import QuizCategory, QuizItem
-from app.modules.quiz.schemas import QuizItemCreate, QuizItemUpdate
+from app.modules.quiz.schemas import QuizItemCreate, QuizItemUpdate, QuizParseResult, validate_answer_indices
 
 
 # ---------- 分类 ----------
@@ -77,15 +77,11 @@ def get_item(db: Session, item_id: int) -> QuizItem:
 
 
 def _validate_answer(answer: list[int], options_count: int, qtype: str) -> list[int]:
-    """答案下标合法性：不越界、去重排序；单选恰好 1 个，多选 1 个以上。"""
-    clean = sorted({i for i in answer})
-    if any(i < 0 or i >= options_count for i in clean):
-        raise HTTPException(status_code=422, detail="答案下标超出选项范围")
-    if qtype == "single" and len(clean) != 1:
-        raise HTTPException(status_code=422, detail="单选题答案必须恰好 1 个选项")
-    if qtype == "multi" and len(clean) < 2:
-        raise HTTPException(status_code=422, detail="多选题答案至少 2 个选项")
-    return clean
+    """将共享答案约束转换为编辑接口的参数错误。"""
+    try:
+        return validate_answer_indices(answer, options_count, qtype)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def create_item(db: Session, data: QuizItemCreate) -> QuizItem:
@@ -137,11 +133,12 @@ _PARSE_PROMPT = """从下面的文本中提取所有选择题（笔试题目）�
 
 要求：
 1. options 只保留选项文字本身（去掉 A.、B.、（A）等前缀），按原文顺序。
-2. answer 是正确选项的下标数组（从 0 开始）；单选恰好 1 个，多选可能多个。
+2. answer 是正确选项的下标数组（从 0 开始）；单选恰好 1 个，多选至少 2 个，不能越界。
 3. qtype：只有一个正确答案为 "single"，多个正确答案为 "multi"；无法判断时按 single。
 4. analysis 为该题的解析说明，原文没有则用空字符串。
 5. 题干不完整或不是选择题的直接跳过。
 6. 文本中没有选择题时返回 {"questions": []}。
+7. 每道题须有 2 到 8 个非空选项，不能猜测或补造原文未提供的正确答案。
 
 文本：
 """
@@ -151,29 +148,17 @@ async def parse_quiz_text(text: str) -> list[dict]:
     """调用 LLM 从原始文本解析选择题候选列表（不入库，由前端预览确认）。"""
     content = await llm_chat([{"role": "user", "content": _PARSE_PROMPT + text}])
     # 剥离可能的 ```json 包裹
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", content.strip(), flags=re.MULTILINE)
+    cleaned = content.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        cleaned = fenced.group(1)
     try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"AI 返回格式解析失败：{e}")
-    questions = data.get("questions", [])
-    # 规范化：answer 去重排序、越界丢弃；qtype 归一
-    result = []
-    for q in questions:
-        options = q.get("options") or []
-        answer = sorted({i for i in (q.get("answer") or []) if isinstance(i, int) and 0 <= i < len(options)})
-        if not q.get("question") or len(options) < 2 or not answer:
-            continue
-        qtype = "multi" if len(answer) > 1 or q.get("qtype") == "multi" else "single"
-        result.append(
-            {
-                "question": str(q["question"]).strip(),
-                "options": [str(o) for o in options],
-                "answer": answer,
-                "qtype": qtype,
-                "analysis": str(q.get("analysis") or ""),
-            }
-        )
-    if not result:
+        parsed = QuizParseResult.model_validate_json(cleaned)
+    except ValidationError as exc:
+        raise HTTPException(status_code=502, detail="AI 返回的题目格式不符合要求，请检查原文后重新解析") from exc
+    if not parsed.questions:
         raise HTTPException(status_code=422, detail="未能从文本中解析出选择题，请检查文本内容")
-    return result
+    return [
+        {**question.model_dump(), "analysis": question.analysis or ""}
+        for question in parsed.questions
+    ]

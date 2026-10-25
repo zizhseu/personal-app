@@ -332,7 +332,6 @@ async function confirmBatchRemove() {
 .due-late { color: var(--el-color-danger-dark-2); }
 .pager { min-height: 44px; display: flex; align-items: flex-end; justify-content: flex-end; }
 .list-empty { flex: 1; }
-.editor-card { max-width: 960px; }
 .editor-card, .empty-card { min-height: 572px; }
 .editor { width: 100%; }
 .editor :deep(.el-textarea__inner) { resize: vertical; }

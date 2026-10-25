@@ -19,19 +19,19 @@ defineProps<{
 
 <style scoped>
 .stat-card {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
-  padding: 16px 18px;
-  box-shadow: 0 1px 2px rgba(23, 24, 26, 0.04);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
   transition:
-    transform 0.15s ease,
+    border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(23, 24, 26, 0.08);
+  border-color: var(--el-color-primary-light-7);
+  box-shadow: var(--shadow-md);
 }
 
 .stat-head {
@@ -49,13 +49,13 @@ defineProps<{
 
 .label {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .value {
-  margin-top: 6px;
-  font-size: 30px;
+  margin-top: 12px;
+  font-size: 32px;
   font-weight: 700;
   line-height: 1;
   color: var(--ink);

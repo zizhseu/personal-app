@@ -1,35 +1,50 @@
 /* ============================================================
-   设计 tokens —— 「作战室」生产力风格
-   浅冷灰底 · 白卡层级 · 墨黑主色 · 柿色(秋意)点缀 · DIN 感数字
+   参考 OfferPilot 的视觉层次：浅紫灰底、白色侧栏、靛紫色交互。
+   保持现有 Element Plus 组件和业务模块，统一颜色、字体与间距。
    ============================================================ */
 :root {
   /* 文字 */
-  --ink: #1a1d21;
-  --ink-2: #4b5563;
-  --ink-3: #9ca3af;
+  --ink: #23213a;
+  --ink-2: #5b587a;
+  --ink-3: #6f6b95;
   /* 面 */
-  --paper: #f3f4f6;
+  --paper: #f6f6fb;
   --card: #ffffff;
-  --line: #e8eaed;
-  --line-soft: #eef0f2;
-  /* 柿色：秋招战役的唯一点缀色 */
-  --accent: #e8590c;
+  --line: #ecebf5;
+  --line-soft: #f0eff7;
+  --surface-sunken: #faf9fe;
+  --surface-hover: rgb(99 102 241 / 5%);
+  --surface-selected: #f1f0fd;
+  --accent: #6366f1;
+  --brand-gradient: linear-gradient(135deg, #6366f1, #a855f7);
+  --shadow-sm: 0 1px 3px rgb(31 29 58 / 5%), 0 1px 2px rgb(31 29 58 / 3%);
+  --shadow-md: 0 4px 16px rgb(99 102 241 / 7%);
   --radius-card: 12px;
 
-  /* Element Plus 主色 → 墨黑（按钮/链接/激活态统一） */
-  --el-color-primary: #17181a;
-  --el-color-primary-dark-2: #000000;
-  --el-color-primary-light-3: #45474d;
-  --el-color-primary-light-5: #75777c;
-  --el-color-primary-light-7: #a5a6aa;
-  --el-color-primary-light-8: #cbcbce;
-  --el-color-primary-light-9: #f2f2f3;
+  /* 深一级靛紫色保证主按钮白色文字清晰可读。 */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-dark-2: #4338ca;
+  --el-color-primary-light-3: #817beb;
+  --el-color-primary-light-5: #a7a3f2;
+  --el-color-primary-light-7: #cac8f8;
+  --el-color-primary-light-8: #dcdafa;
+  --el-color-primary-light-9: #f1f0fd;
+  --el-text-color-primary: var(--ink);
+  --el-text-color-regular: var(--ink-2);
+  --el-text-color-secondary: var(--ink-3);
+  --el-border-color: #dedcf0;
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line-soft);
+  --el-fill-color-light: var(--surface-sunken);
+  --el-fill-color-lighter: var(--paper);
+  --el-fill-color-blank: var(--card);
+  --el-component-size: 36px;
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-dialog-border-radius: var(--radius-card);
   --el-font-family:
-    -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'HarmonyOS Sans SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* 数字/大数展示：DIN 感等宽数字 */
@@ -55,9 +70,7 @@ body,
 }
 
 body {
-  font-family:
-    -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+  font-family: var(--el-font-family);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   background-color: var(--paper);
@@ -68,11 +81,12 @@ body {
 .el-card {
   --el-card-border-radius: var(--radius-card);
   --el-card-border-color: var(--line);
-  box-shadow: 0 1px 2px rgba(23, 24, 26, 0.04) !important;
+  background: var(--card);
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .el-card__header {
-  padding: 14px 20px;
+  padding: 16px 20px;
   border-bottom-color: var(--line-soft);
   font-weight: 600;
   font-size: 14px;
@@ -84,9 +98,9 @@ body {
 
 /* ---------- 表格：浅表头 · 去重线 · 柔和悬停 ---------- */
 .el-table {
-  --el-table-header-bg-color: #fafafb;
-  --el-table-header-text-color: #6b7280;
-  --el-table-row-hover-bg-color: #f6f7f8;
+  --el-table-header-bg-color: var(--surface-sunken);
+  --el-table-header-text-color: var(--ink-3);
+  --el-table-row-hover-bg-color: var(--surface-hover);
   --el-table-border-color: var(--line-soft);
 }
 
@@ -107,7 +121,7 @@ body {
 
 .page-head h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -123,6 +137,28 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-head .actions .el-button + .el-button { margin-left: 0; }
+
+/* ---------- 表单与浮层 ---------- */
+.el-button { font-weight: 500; }
+.el-button--primary { box-shadow: 0 2px 4px rgb(79 70 229 / 12%); }
+.el-button--primary.is-link, .el-button--primary.is-text { box-shadow: none; }
+.el-input__wrapper, .el-select__wrapper { border-radius: 8px; }
+.el-dialog { max-width: calc(100vw - 32px); }
+/* 确认框保留组件自身的宽度上限，仅在窄屏时缩小，避免全屏下横向铺满。 */
+.el-message-box { max-width: min(var(--el-messagebox-width, 420px), calc(100vw - 32px)); }
+.el-dialog__title { font-weight: 650; }
+.el-empty__description p { color: var(--ink-3); }
+
+@media (max-width: 760px) {
+  .page-head { align-items: flex-start; gap: 14px; }
+  .page-head h1 { font-size: 22px; }
+  .page-head .actions { width: 100%; gap: 8px; }
+  .el-card__body, .el-card__header { padding: 16px; }
+  .el-pagination { flex-wrap: wrap; row-gap: 8px; }
 }
 
 /* ---------- 滚动条 ---------- */
@@ -132,12 +168,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: #dcd9eb;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b7bcc3;
+  background: #c1bdd7;
 }
 
 ::-webkit-scrollbar-track {
@@ -196,7 +232,7 @@ body {
 }
 
 .md-body code {
-  background: #f2f2f3;
+  background: var(--surface-selected);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 0.88em;
@@ -205,7 +241,7 @@ body {
 }
 
 .md-body pre {
-  background: #f6f8fa;
+  background: var(--surface-sunken);
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   padding: 12px 14px;
@@ -225,7 +261,7 @@ body {
   margin: 0.8em 0;
   padding: 6px 14px;
   border-left: 3px solid var(--accent);
-  background: #fafafb;
+  background: var(--surface-sunken);
   border-radius: 0 6px 6px 0;
   color: var(--ink-3);
 }
@@ -245,7 +281,7 @@ body {
 }
 
 .md-body th {
-  background: #fafafb;
+  background: var(--surface-sunken);
 }
 
 .md-body a {

@@ -1,392 +1,206 @@
 <template>
-  <el-container class="layout" direction="vertical">
-    <!-- 顶部导航栏：左段与侧栏连通（同宽同底色），菜单从侧栏右侧开始 -->
-    <header class="topbar">
-      <div class="brand-zone">
-        <span class="logo-mark">秋</span>
-        <span class="logo-name">个人 App</span>
-      </div>
-      <div class="topbar-main">
-        <el-menu mode="horizontal" router :default-active="activePath" class="top-menu">
-          <el-menu-item v-for="item in topItems" :key="item.path" :index="item.path">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.title }}</span>
-          </el-menu-item>
-        </el-menu>
-        <!-- 战役徽章（从第一笔投递算起） -->
-        <div class="campaign num">
-          <template v-if="campaignDays !== null">
-            第 <span class="accent">{{ campaignDays }}</span> 天
-            <span class="sep">·</span>
-            {{ store.applications.length }} 投递
-          </template>
-          <template v-else>开始记录你的秋招</template>
+  <el-container class="layout" direction="horizontal">
+    <SidebarNavigation class="desktop-sidebar" :groups="groups" :active-path="activePath" :collapsed-groups="collapsedGroups" @toggle-group="toggleGroup" />
+    <el-container class="workspace" direction="vertical">
+      <header class="topbar">
+        <div class="page-location">
+          <button type="button" class="menu-toggle" aria-label="打开功能导航" @click="navigationOpen = true">
+            <el-icon><Expand /></el-icon>
+          </button>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item>{{ activeGroup?.label ?? '个人偏好' }}</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ activeItem?.title ?? activeGroup?.label ?? '设置' }}</el-breadcrumb-item>
+          </el-breadcrumb>
         </div>
-      </div>
-    </header>
-
-    <el-container class="body">
-      <!-- 侧边栏：模块分组索引（数据源 = 模块注册表） -->
-      <aside class="sidebar">
-        <div v-for="g in groups" :key="g.key" class="group">
-          <div class="group-title">
-            <span>{{ g.label }}</span>
-            <el-icon
-              v-if="g.creatable && g.onCreate"
-              class="add-btn"
-              title="新增分类"
-              @click="g.onCreate?.()"
-            >
-              <Plus />
-            </el-icon>
+        <div class="topbar-meta">
+          <span class="today">{{ today }}</span>
+          <div class="campaign num">
+            <template v-if="campaignDays !== null">
+              第 <span class="campaign-number">{{ campaignDays }}</span> 天
+              <span class="campaign-separator" aria-hidden="true">·</span>
+              {{ store.applications.length }} 投递
+            </template>
+            <template v-else>开始记录你的秋招</template>
           </div>
-          <router-link
-            v-for="item in g.items"
-            :key="item.path"
-            :to="item.path"
-            class="group-item"
-            :class="{ active: activePath === item.path }"
-          >
-            <span class="group-item-label">{{ item.title }}</span>
-            <span v-if="item.actions?.length" class="item-actions" @click.stop.prevent>
-              <el-icon
-                v-for="a in item.actions"
-                :key="a.title"
-                :title="a.title"
-                class="action-icon"
-                @click="a.handler()"
-              >
-                <component :is="a.icon" />
-              </el-icon>
-            </span>
-          </router-link>
-          <div v-if="g.items.length === 0" class="group-empty">{{ g.creatable ? '点击 + 新建分类' : '筹备中，敬请期待' }}</div>
         </div>
-        <div class="sidebar-foot">
-          <router-link
-            to="/settings"
-            class="foot-settings"
-            :class="{ active: route.path === '/settings' }"
-          >
-            <el-icon><Setting /></el-icon>
-            <span>设置</span>
-          </router-link>
-          <span>秋招加油 💪</span>
-        </div>
-      </aside>
-      <el-main class="main">
-        <router-view />
+      </header>
+      <el-main ref="mainRegion" class="main">
+        <div class="content"><router-view /></div>
       </el-main>
     </el-container>
+    <el-drawer v-model="navigationOpen" title="功能导航" direction="ltr" size="264px" destroy-on-close class="navigation-drawer">
+      <SidebarNavigation :groups="groups" :active-path="activePath" :collapsed-groups="collapsedGroups" @toggle-group="toggleGroup" @navigate="navigationOpen = false" />
+    </el-drawer>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, provide, ref, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { modules } from '@/modules'
 import type { MenuItem } from '@/shared/types/module'
-// 注：战役徽章与 qa/quiz 分类菜单读取各自模块 store；模块化演进时再抽离
 import { useJobsStore } from '@/modules/jobs/store'
 import { useQaStore } from '@/modules/qa/store'
 import { useQuizStore } from '@/modules/quiz/store'
 import { useTodoStore } from '@/modules/todo/store'
+import { useCodingStore } from '@/modules/coding/store'
+import SidebarNavigation from './SidebarNavigation.vue'
+import { pageScrollKey } from '@/shared/composables/useListViewState'
 
 const route = useRoute()
 const store = useJobsStore()
 const qaStore = useQaStore()
 const quizStore = useQuizStore()
 const todoStore = useTodoStore()
+const codingStore = useCodingStore()
+const mainRegion = ref<{ $el: HTMLElement }>()
+provide(pageScrollKey, computed(() => mainRegion.value?.$el ?? null))
+const navigationOpen = ref(false)
+const collapseStorageKey = 'personal-app.sidebar.collapsed-groups.v1'
+const collapsedGroups = ref<string[]>(loadCollapsedGroups())
+const today = dayjs().format('M月D日 dddd')
+
+function loadCollapsedGroups(): string[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(collapseStorageKey) ?? '[]')
+    return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function toggleGroup(key: string) {
+  collapsedGroups.value = collapsedGroups.value.includes(key)
+    ? collapsedGroups.value.filter(value => value !== key)
+    : [...collapsedGroups.value, key]
+  try {
+    localStorage.setItem(collapseStorageKey, JSON.stringify(collapsedGroups.value))
+  } catch { /* 浏览器禁止存储时，本次打开期间仍可折叠。 */ }
+}
 
 onMounted(() => {
-  void store.ensureLoaded() // 战役徽章数据
-  void qaStore.ensureLoaded() // qa 分类菜单
-  void quizStore.ensureLoaded() // quiz 分类菜单
-  void todoStore.ensureLoaded() // 待办目录菜单
+  void store.ensureLoaded()
+  void qaStore.ensureLoaded()
+  void quizStore.ensureLoaded()
+  void todoStore.ensureLoaded()
+  void codingStore.ensureLoaded()
 })
 
-/** 侧栏分组 = 模块 → { 显示名, 菜单项 }；模块提供 menu() 时用动态菜单（如 qa 分类）；sidebar: false 的模块不生成分组 */
+watch(() => route.path, () => { navigationOpen.value = false })
+
+/** 导航仍从模块注册表派生，保留所有动态分类与分类操作。 */
 const groups = computed(() =>
-  modules
-    .filter((m) => m.sidebar !== false)
-    .map((m) => ({
-    key: m.name,
-    label: m.label ?? m.name,
-    creatable: !!m.creatable,
-    onCreate: m.onCreate,
-    items: m.menu
-      ? m.menu()
-      : m.routes
-          .filter((r) => r.meta?.title && !r.meta?.hidden)
-          .map<MenuItem>((r) => ({ path: r.path as string, title: r.meta?.title as string })),
+  modules.filter((module) => module.sidebar !== false).map((module) => ({
+    key: module.name,
+    label: module.label ?? module.name,
+    creatable: !!module.creatable,
+    onCreate: module.onCreate,
+    items: module.menu
+      ? module.menu()
+      : module.routes
+          .filter((record) => record.meta?.title && !record.meta?.hidden)
+          .map<MenuItem>((record) => ({
+            path: record.path,
+            title: record.meta?.title as string,
+            icon: record.meta?.icon as Component | undefined,
+          })),
   })),
 )
 
-/** 顶部导航 = 侧栏全部菜单项（横向） */
-const topItems = computed(() =>
-  groups.value.flatMap((g) => g.items).map(({ path, title, icon }) => ({ path, title, icon })),
-)
-
-/**
- * 当前路由映射到菜单高亮项：
- * hidden 路由由 meta.activeMenu 指定归属；详情类路由（如 /qa/cat/5/12）匹配为其前缀的菜单项
- */
+const menuItems = computed(() => groups.value.flatMap((group) => group.items))
 const activePath = computed(() => {
-  const meta = route.meta as { activeMenu?: string }
-  if (meta.activeMenu) return meta.activeMenu
-  const hit = topItems.value.find(
-    (t) => route.path === t.path || route.path.startsWith(t.path + '/'),
-  )
-  return hit?.path ?? route.path
+  const activeMenu = route.meta.activeMenu as string | undefined
+  if (activeMenu) return activeMenu
+  // 优先匹配最长路径，避免相邻分类或嵌套路由误高亮。
+  return [...menuItems.value]
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((item) => route.path === item.path || route.path.startsWith(item.path + '/'))?.path ?? route.path
 })
+const activeGroup = computed(() => {
+  const matched = groups.value.find((group) => group.items.some((item) => item.path === activePath.value))
+  if (matched) return matched
+  const routeModule = modules.find((module) => module.routes.some((record) => record.name === route.name))
+  return groups.value.find((group) => group.key === routeModule?.name)
+})
+const activeItem = computed(() => menuItems.value.find((item) => item.path === activePath.value))
 
-/** 战役天数 = 从最早一笔投递日期到今天 */
+/** 秋招天数从最早一笔投递日期算起。 */
 const campaignDays = computed(() => {
-  const dates = store.applications
-    .map((a) => a.applyDate)
-    .filter((d): d is string => !!d)
-    .sort()
+  const dates = store.applications.map((application) => application.applyDate).filter((date): date is string => !!date).sort()
   if (!dates.length) return null
   return dayjs().diff(dayjs(dates[0]), 'day') + 1
 })
 </script>
 
 <style scoped>
-.layout {
-  height: 100%;
-}
-
-/* ---------- 顶部导航栏 ---------- */
+.layout { height: 100dvh; min-height: 0; overflow: hidden; }
+.workspace { min-width: 0; min-height: 0; }
 .topbar {
-  height: 56px;
-  display: flex;
-  align-items: stretch;
-  background: #fff;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
-/* 左上角品牌区：与侧栏同宽同底色，视觉上连通成 L 型 */
-.brand-zone {
-  width: 216px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 18px;
-  background: #fafafb;
-  border-right: 1px solid var(--line);
-}
-
-.logo-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-}
-
-.logo-name {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-}
-
-.topbar-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 0 20px 0 8px;
-}
-
-.top-menu {
-  border-bottom: none;
-  --el-menu-active-color: var(--el-color-primary);
-  --el-menu-hover-bg-color: #f4f5f7;
-}
-
-.top-menu :deep(.el-menu-item) {
-  height: 56px;
-  line-height: 56px;
-  margin: 0 2px;
-}
-
-.campaign {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-
-.campaign .accent {
-  color: var(--accent);
-  font-size: 15px;
-}
-
-.campaign .sep {
-  margin: 0 7px;
-  color: var(--accent);
-}
-
-/* ---------- 侧边栏：分组索引 ---------- */
-.body {
-  min-height: 0;
-}
-
-.sidebar {
-  width: 216px;
-  flex-shrink: 0;
-  background: #fafafb;
-  border-right: 1px solid var(--line);
-  padding: 18px 12px;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.group {
-  margin-bottom: 24px;
-}
-
-.group-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  padding: 0 10px;
-  margin-bottom: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 76px;
+  gap: 20px;
+  padding: 16px 28px;
+  background: var(--paper);
 }
-
-.add-btn {
-  font-size: 14px;
-  color: var(--ink-3);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.add-btn:hover {
-  color: var(--accent);
-  background: #f1f2f4;
-}
-
-.group-item {
-  display: flex;
-  align-items: center;
-  padding: 8px 10px;
+.page-location { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.page-location :deep(.el-breadcrumb) { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.page-location :deep(.el-breadcrumb__inner) { color: var(--ink-3); }
+.page-location :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) { color: var(--ink); font-weight: 600; }
+.topbar-meta { display: flex; align-items: center; flex-shrink: 0; gap: 16px; }
+.today { color: var(--ink-3); font-size: 12px; }
+.campaign {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
   border-radius: 8px;
+  background: var(--card);
   color: var(--ink-2);
-  font-size: 13.5px;
-  text-decoration: none;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.group-item:hover {
-  background: #f1f2f4;
-  color: var(--ink);
-}
-
-.group-item.active {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-  font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.group-item-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
   white-space: nowrap;
 }
-
-/* hover 显示分类的重命名 / 删除小按钮 */
-.item-actions {
+.campaign-number { color: var(--el-color-primary); font-weight: 650; }
+.campaign-separator { padding: 0 6px; color: var(--ink-3); }
+.menu-toggle {
   display: none;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
   flex-shrink: 0;
-}
-
-.group-item:hover .item-actions {
-  display: inline-flex;
-}
-
-.action-icon {
-  font-size: 13px;
-  color: var(--ink-3);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-}
-
-.action-icon:hover {
-  color: var(--ink);
-  background: #e8eaed;
-}
-
-.group-empty {
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-.sidebar-foot {
-  margin-top: auto;
-  padding: 0 10px;
-  font-size: 12px;
-  color: var(--ink-3);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.foot-settings {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 8px;
-  margin-left: -8px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 600;
+  background: var(--card);
   color: var(--ink-2);
-  text-decoration: none;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+  font-size: 18px;
+  cursor: pointer;
 }
+.main { min-width: 0; padding: 4px 28px 28px; overflow: auto; overscroll-behavior: contain; }
+/* 内容宽度由当前窗口决定，全屏与侧栏展开时均铺满可用区域。 */
+.content { width: 100%; min-width: 0; }
+@media (max-width: 1000px) {
+  .today { display: none; }
+  .topbar { padding-inline: 20px; }
+  .main { padding-inline: 20px; }
+}
+@media (max-width: 760px) {
+  .desktop-sidebar { display: none; }
+  .menu-toggle { display: inline-flex; }
+  .topbar { min-height: 68px; padding: 12px 16px; gap: 12px; }
+  .topbar-meta { min-width: 0; flex-shrink: 1; }
+  .campaign { padding: 7px 9px; font-size: 11px; }
+  .main { padding: 8px 16px 20px; }
+}
+@media (max-width: 420px) {
+  .page-location :deep(.el-breadcrumb__item:first-child) { display: none; }
+}
+</style>
 
-.foot-settings:hover {
-  background: #f1f2f4;
-  color: var(--ink);
-}
-
-.foot-settings.active {
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-/* ---------- 主区 ---------- */
-.main {
-  padding: 24px 28px;
-  overflow-y: auto;
-}
+<style>
+.navigation-drawer .el-drawer__body { padding: 0; overflow: hidden; }
+.navigation-drawer .el-drawer__header { margin-bottom: 0; padding: 16px 20px; font-size: 14px; }
+.navigation-drawer .sidebar { width: 100%; border-right: 0; }
 </style>

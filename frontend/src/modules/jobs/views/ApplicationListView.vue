@@ -17,16 +17,19 @@
       <el-input
         v-model="keyword"
         placeholder="搜索公司 / 岗位"
+        :maxlength="500"
         clearable
         prefix-icon="Search"
         style="width: 260px"
       />
+      <el-button @click="view.reset()">重置筛选</el-button>
     </div>
     <el-table
+      ref="tableRef"
       v-loading="store.loading"
       :data="paged"
       row-key="id"
-      :default-sort="{ prop: 'applyDate', order: 'descending' }"
+      :default-sort="tableSort"
       @sort-change="onSortChange"
       @filter-change="onFilterChange"
       @row-click="goDetail"
@@ -203,9 +206,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue'
+import { ElMessageBox, type TableInstance } from 'element-plus'
 import dayjs from 'dayjs'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
@@ -213,30 +215,35 @@ import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS
 import { useJobsStore } from '../store'
 import { currentResult, latestRound } from '../selectors'
 import type { Application, ApplicationStatus, RoundResult } from '../types'
+import { useListViewState } from '@/shared/composables/useListViewState'
+import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
 
-const router = useRouter()
 const store = useJobsStore()
 
-const keyword = ref('')
+const PAGE_SIZE = 10
+const view = useListViewState({
+  q: textField(), status: listField<ApplicationStatus>(STATUS_ORDER),
+  result: listField<RoundResult>(Object.keys(RESULT_LABELS) as RoundResult[]),
+  sort: choiceField('applyDate', ['company', 'position', 'applyDate', 'deadline']),
+  order: choiceField('desc', ['asc', 'desc', 'none']), page: pageField(),
+}, { routes: ['jobs-list'], ready: () => store.loaded && !store.loading, count: (): number => sorted.value.length, pageSize: PAGE_SIZE })
+const { q: keyword, status: statusFilter, result: resultFilter, sort: sortBy, order: sortOrder, page } = toRefs(view.state)
 
 /** 表头状态筛选（勾选值由 el-table 的 filter-change 事件同步） */
-const statusFilter = ref<ApplicationStatus[]>([])
 const statusFilters = STATUS_ORDER.map((s) => ({ text: STATUS_LABELS[s], value: s }))
 
 /** 表头结果筛选（选项 = 全部结果枚举） */
-const resultFilter = ref<RoundResult[]>([])
 const resultFilters = (Object.keys(RESULT_LABELS) as RoundResult[]).map((r) => ({
   text: RESULT_LABELS[r],
   value: r,
 }))
 
 /** 排序与分页（EP 内置排序只作用于当前页，故在数据层接管） */
-const PAGE_SIZE = 10
-const page = ref(1)
-const sortState = ref<{ prop: string; order: 'asc' | 'desc' | null }>({
-  prop: 'applyDate',
-  order: 'desc',
-})
+const sortState = computed(() => ({ prop: sortBy.value, order: sortOrder.value === 'none' ? null : sortOrder.value }))
+const tableRef = ref<TableInstance>()
+const tableSort = computed<{ prop: string; order?: 'ascending' | 'descending' }>(() => ({
+  prop: sortBy.value, order: sortOrder.value === 'none' ? undefined : sortOrder.value === 'asc' ? 'ascending' : 'descending',
+}))
 
 const formVisible = ref(false)
 const editing = ref<Application | null>(null)
@@ -316,8 +323,8 @@ const sorted = computed(() => {
     if (prop === 'deadline') {
       return dir * (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999')
     }
-    const av = String((a as Record<string, unknown>)[prop] ?? '')
-    const bv = String((b as Record<string, unknown>)[prop] ?? '')
+    const av = prop in a ? String(a[prop as keyof ListRow] ?? '') : ''
+    const bv = prop in b ? String(b[prop as keyof ListRow] ?? '') : ''
     return dir * av.localeCompare(bv, 'zh')
   })
 })
@@ -327,19 +334,22 @@ const paged = computed(() =>
   sorted.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
 )
 
-function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
-  sortState.value = {
-    prop,
-    order: order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : null,
-  }
-  page.value = 1
+function onSortChange({ prop, order }: { prop?: string; order: 'ascending' | 'descending' | null }) {
+  if (prop && ['company', 'position', 'applyDate', 'deadline'].includes(prop)) sortBy.value = prop as typeof sortBy.value
+  sortOrder.value = order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : 'none'
 }
 
 function onFilterChange(f: Record<string, ApplicationStatus[] | RoundResult[]>) {
   if ('status' in f) statusFilter.value = (f.status as ApplicationStatus[]) ?? []
   if ('result' in f) resultFilter.value = (f.result as RoundResult[]) ?? []
-  page.value = 1
 }
+
+// Element Plus 的 default-sort 只负责初次挂载，历史导航恢复时同步表头指示。
+watch([sortBy, sortOrder], async () => {
+  await nextTick()
+  if (sortOrder.value === 'none') tableRef.value?.clearSort()
+  else tableRef.value?.sort(sortBy.value, sortOrder.value === 'asc' ? 'ascending' : 'descending')
+}, { flush: 'post' })
 
 /** EP 侧过滤与数据层过滤同条件，幂等 */
 function filterStatusMethod(value: ApplicationStatus, row: ListRow) {
@@ -349,15 +359,6 @@ function filterStatusMethod(value: ApplicationStatus, row: ListRow) {
 function filterResultMethod(value: RoundResult, row: ListRow) {
   return currentResult(row) === value
 }
-
-// 搜索 / 筛选变化回第一页；数据增删后页码夹紧
-watch([keyword, statusFilter], () => {
-  page.value = 1
-})
-watch(sorted, (list) => {
-  const maxPage = Math.max(1, Math.ceil(list.length / PAGE_SIZE))
-  if (page.value > maxPage) page.value = maxPage
-})
 
 /** 结果列显示：Offer 态显示 Offer 决定（未决定显示「待决定」），其余显示最新轮次结果 */
 function resultDisplay(row: ListRow): { label: string; color: string } | null {
@@ -378,6 +379,7 @@ function resultOptions(row: ListRow): RoundResult[] {
 
 async function quickSetResult(row: ListRow, r: RoundResult) {
   if (row.status === 'offer') {
+    if (r !== 'accepted' && r !== 'rejected_offer') return
     await store.setOfferDecision(row.id, r)
   } else {
     const latest = latestRound(row)
@@ -401,7 +403,7 @@ function openEdit(row: Application) {
 }
 
 function goDetail(row: Application) {
-  router.push(`/jobs/applications/${row.id}`)
+  void view.navigate(`/jobs/applications/${row.id}`)
 }
 
 async function confirmRemove(row: Application) {
@@ -432,6 +434,9 @@ async function confirmRemove(row: Application) {
 }
 
 .table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 14px 16px 12px;
 }
 

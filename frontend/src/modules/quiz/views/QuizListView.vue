@@ -58,7 +58,7 @@
             :page-size="PAGE_SIZE"
             :total="filtered.length"
             :pager-count="5"
-            small
+            size="small"
             background
             layout="total, prev, pager, next"
           />
@@ -73,6 +73,8 @@
 
     <!-- AI 解析导入 -->
     <el-dialog v-model="importVisible" title="AI 解析导入" width="760px">
+      <p v-if="importModelStatus?.authMode === 'chatgpt' && importModelStatus.llmReady" class="import-model-note">正在使用 ChatGPT 套餐 · {{ importModelStatus.model }} <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer">管理用量</a></p>
+      <p v-else-if="!modelStatusLoading && !importModelStatus?.llmReady" class="import-model-note">模型连接尚未就绪，请前往<router-link to="/settings">设置 · 大模型</router-link>配置并保存。</p>
       <template v-if="!parsedList">
         <p class="import-hint">
           粘贴笔试题目文本（可含题干、选项、答案、解析），AI 会自动提取选择题。支持任意格式，一次可解析多题。
@@ -111,7 +113,7 @@
       <template #footer>
         <template v-if="!parsedList">
           <el-button @click="importVisible = false">取消</el-button>
-          <el-button type="primary" :loading="parsing" :disabled="!rawText.trim()" @click="doParse">
+          <el-button type="primary" :loading="parsing" :disabled="!rawText.trim() || modelStatusLoading || !importModelStatus?.llmReady" @click="doParse">
             AI 解析
           </el-button>
         </template>
@@ -133,6 +135,7 @@ import { ElMessage } from 'element-plus'
 import { useQuizStore } from '../store'
 import * as api from '../api'
 import type { ParsedQuiz } from '../types'
+import { fetchStatus } from '@/modules/aitools/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -225,11 +228,18 @@ const importing = ref(false)
 const parsedList = ref<ParsedQuiz[] | null>(null)
 const picked = ref<boolean[]>([])
 const checkAll = ref(true)
+const importModelStatus = ref<Awaited<ReturnType<typeof fetchStatus>> | null>(null)
+const modelStatusLoading = ref(false)
 
-function openAiImport() {
+async function openAiImport() {
   rawText.value = ''
   parsedList.value = null
   importVisible.value = true
+  importModelStatus.value = null
+  modelStatusLoading.value = true
+  try { importModelStatus.value = await fetchStatus() }
+  catch { /* 请求层已展示错误，可到设置页检查连接。 */ }
+  finally { modelStatusLoading.value = false }
 }
 
 async function doParse() {
@@ -366,6 +376,8 @@ async function doImport() {
 }
 
 /* AI 导入对话框 */
+.import-model-note { margin: 0 0 12px; font-size: 13px; color: var(--ink-3); }
+.import-model-note a { color: var(--el-color-primary); margin-left: 5px; }
 .import-hint {
   margin: 0 0 10px;
   font-size: 12.5px;

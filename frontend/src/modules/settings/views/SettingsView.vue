@@ -3,11 +3,16 @@
     <div class="page-head">
       <div>
         <h1>设置</h1>
-        <p class="sub">应用偏好，保存在本机浏览器中</p>
+        <p class="sub">管理模型连接、采集来源与应用偏好</p>
       </div>
     </div>
 
+    <ModelSettings />
+    <SourceSettings />
+
     <el-card shadow="never" class="block-card">
+      <h2 class="preferences-title">应用偏好</h2>
+      <p class="sub preferences-note">以下学习偏好自动保存在本机浏览器中</p>
       <div class="group-title">导入</div>
       <div class="setting-row">
         <div class="setting-info">
@@ -40,6 +45,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSettingsStore } from '../store'
+import ModelSettings from '../components/ModelSettings.vue'
+import SourceSettings from '@/modules/experiences/components/SourceSettings.vue'
 
 const store = useSettingsStore()
 
@@ -59,7 +66,7 @@ const quizAnswerMode = computed({
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 720px;
+  min-width: 0;
 }
 
 .page-head h1 {
@@ -85,6 +92,9 @@ const quizAnswerMode = computed({
   color: var(--ink-3);
   margin-bottom: 4px;
 }
+
+.preferences-title { margin: 0; font-size: 17px; color: var(--ink); }
+.preferences-note { margin-bottom: 18px; }
 
 .group-title.margin-top {
   margin-top: 18px;
@@ -112,5 +122,9 @@ const quizAnswerMode = computed({
   margin-top: 3px;
   font-size: 12.5px;
   color: var(--ink-3);
+}
+
+@media (max-width: 600px) {
+  .setting-row { align-items: flex-start; flex-direction: column; }
 }
 </style>
