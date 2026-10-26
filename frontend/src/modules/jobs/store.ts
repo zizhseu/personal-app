@@ -4,6 +4,7 @@ import type {
   Application,
   ApplicationStatus,
   ApplicationPayload,
+  ApplicationUpdatePayload,
   EventPayload,
   RoundPayload,
   ScheduleEvent,
@@ -43,7 +44,7 @@ export const useJobsStore = defineStore('jobs', {
       await this.loadAll()
     },
     /** silent = 不弹成功提示（列表内快捷编辑用） */
-    async update(id: number, payload: Partial<ApplicationPayload>, silent = false) {
+    async update(id: number, payload: ApplicationUpdatePayload, silent = false) {
       await api.updateApplication(id, payload)
       if (!silent) ElMessage.success('保存成功')
       await this.loadAll()
@@ -82,6 +83,11 @@ export const useJobsStore = defineStore('jobs', {
     async removeStatusHistory(historyId: number) {
       await api.deleteStatusHistory(historyId)
       ElMessage.success('已删除该条状态记录')
+      await this.loadAll()
+    },
+    async updateStatusPosition(historyId: number, position: string | null) {
+      await api.updateStatusPosition(historyId, position)
+      ElMessage.success('已更新该阶段岗位')
       await this.loadAll()
     },
     /** 手动删除一条结果变化记录 */

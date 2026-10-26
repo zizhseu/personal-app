@@ -15,6 +15,7 @@ class Application(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     company: Mapped[str] = mapped_column(String(100))
     position: Mapped[str | None] = mapped_column(String(100))  # 岗位（选填）
+    position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     url: Mapped[str | None] = mapped_column(String(500))          # 招聘页面链接（点击跳转）
     apply_date: Mapped[date | None] = mapped_column(Date)         # 投递日期
     salary: Mapped[str | None] = mapped_column(String(50))        # 薪资范围（自由文本）
@@ -40,7 +41,7 @@ class Application(Base, TimestampMixin):
         # 有时间的按时间升序在前，空时间排最后
         ordered_rounds = sorted(
             self.rounds,
-            key=lambda r: (r.scheduled_at is None, r.scheduled_at or datetime.min),
+            key=lambda r: (r.position_version, r.scheduled_at is None, r.scheduled_at or datetime.min, r.id),
         )
         ordered_history = sorted(
             self.status_history,
@@ -54,6 +55,7 @@ class Application(Base, TimestampMixin):
             "id": self.id,
             "company": self.company,
             "position": self.position,
+            "positionVersion": self.position_version,
             "url": self.url,
             "applyDate": self.apply_date.isoformat() if self.apply_date else None,
             "salary": self.salary,
@@ -82,6 +84,9 @@ class InterviewRound(Base, TimestampMixin):
         ForeignKey("application.id", ondelete="CASCADE"), index=True
     )
     round_type: Mapped[str] = mapped_column(String(20))
+    position: Mapped[str | None] = mapped_column(String(100))
+    position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status_history_id: Mapped[int | None] = mapped_column(ForeignKey("status_history.id", ondelete="SET NULL"))
     start_at: Mapped[datetime | None] = mapped_column(DateTime)          # 开始时间
     duration_minutes: Mapped[int | None] = mapped_column(Integer)        # 持续分钟数
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime)      # 截止时间 = 开始 + 持续（后端计算）
@@ -96,6 +101,9 @@ class InterviewRound(Base, TimestampMixin):
             "id": self.id,
             "applicationId": self.application_id,
             "roundType": self.round_type,
+            "position": self.position,
+            "positionVersion": self.position_version,
+            "statusHistoryId": self.status_history_id,
             "startAt": self.start_at.isoformat() if self.start_at else None,
             "durationMinutes": self.duration_minutes,
             "scheduledAt": self.scheduled_at.isoformat() if self.scheduled_at else None,
@@ -146,6 +154,8 @@ class StatusHistory(Base, TimestampMixin):
         ForeignKey("application.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(20))
+    position: Mapped[str | None] = mapped_column(String(100))
+    position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     def to_dict(self) -> dict:
@@ -153,6 +163,8 @@ class StatusHistory(Base, TimestampMixin):
             "id": self.id,
             "applicationId": self.application_id,
             "status": self.status,
+            "position": self.position,
+            "positionVersion": self.position_version,
             "changedAt": self.changed_at.isoformat() if self.changed_at else None,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
@@ -172,6 +184,9 @@ class RoundResultHistory(Base, TimestampMixin):
         ForeignKey("application.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(20))  # 变化发生时的投递状态（归属用）
+    position: Mapped[str | None] = mapped_column(String(100))
+    position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status_history_id: Mapped[int | None] = mapped_column(ForeignKey("status_history.id", ondelete="SET NULL"))
     from_result: Mapped[str | None] = mapped_column(String(20))  # 创建时初始结果为 None
     to_result: Mapped[str] = mapped_column(String(20))
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -184,6 +199,9 @@ class RoundResultHistory(Base, TimestampMixin):
             "roundId": self.round_id,
             "applicationId": self.application_id,
             "status": self.status,
+            "position": self.position,
+            "positionVersion": self.position_version,
+            "statusHistoryId": self.status_history_id,
             "roundType": self.round.round_type,
             "fromResult": self.from_result,
             "toResult": self.to_result,

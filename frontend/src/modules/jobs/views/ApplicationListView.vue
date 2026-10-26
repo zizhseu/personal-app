@@ -213,7 +213,7 @@ import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
-import { currentResult, latestRound } from '../selectors'
+import { currentResult, currentRounds, latestRound } from '../selectors'
 import type { Application, ApplicationStatus, RoundResult } from '../types'
 import { useListViewState } from '@/shared/composables/useListViewState'
 import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
@@ -294,7 +294,7 @@ const filtered = computed(() => {
 
 /** 截止时间 = 流程轮次中最新的计划时间 */
 function latestRoundTime(a: Application): string | null {
-  const times = a.rounds.map((r) => r.scheduledAt).filter((t): t is string => !!t)
+  const times = currentRounds(a).map((r) => r.scheduledAt).filter((t): t is string => !!t)
   return times.length ? times.reduce((m, t) => (t > m ? t : m)) : null
 }
 

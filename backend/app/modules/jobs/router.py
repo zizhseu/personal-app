@@ -13,6 +13,7 @@ from app.modules.jobs.schemas import (
     OfferDecisionPatch,
     RoundCreate,
     RoundUpdate,
+    StatusHistoryPositionInput,
 )
 
 router = APIRouter(prefix="/api/jobs", tags=["秋招投递"])
@@ -82,6 +83,11 @@ def delete_status_history(history_id: int, db: Session = Depends(get_db)):
     """手动删除一条状态变化记录。"""
     service.delete_status_history(db, history_id)
     return {"ok": True}
+
+
+@router.patch("/status-history/{history_id}/position")
+def update_status_position(history_id: int, data: StatusHistoryPositionInput, db: Session = Depends(get_db)):
+    return service.update_status_position(db, history_id, data).to_dict()
 
 
 @router.delete("/result-history/{history_id}")

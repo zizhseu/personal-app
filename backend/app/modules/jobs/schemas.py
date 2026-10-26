@@ -2,15 +2,23 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from app.modules.jobs.constants import APPLICATION_STATUSES, EVENT_TYPES, ROUND_RESULTS, ROUND_TYPES
 from app.shared.schemas import CamelModel
 
 
-class ApplicationCreate(CamelModel):
+class PositionInput(CamelModel):
+    position: str | None = Field(default=None, max_length=100)
+
+    @field_validator("position")
+    @classmethod
+    def normalize_position(cls, value):
+        return value.strip() or None if value is not None else None
+
+
+class ApplicationCreate(PositionInput):
     company: str
-    position: str | None = None
     url: str | None = None
     apply_date: date | None = None
     salary: str | None = None
@@ -19,19 +27,31 @@ class ApplicationCreate(CamelModel):
     note: str | None = None
 
 
-class ApplicationUpdate(CamelModel):
+class ApplicationUpdate(PositionInput):
     """全部字段可选，仅更新传入的字段。"""
 
     model_config = ConfigDict(extra="forbid")
 
     company: str | None = None
-    position: str | None = None
     url: str | None = None
     apply_date: date | None = None
     salary: str | None = None
     base: list[str] | None = None
     status: Literal[APPLICATION_STATUSES] | None = None
     note: str | None = None
+    restart_process: bool = False
+    expected_position_version: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def check_restart(self):
+        if self.restart_process and not self.position:
+            raise ValueError("重新投递时请填写岗位名称")
+        return self
+
+
+class StatusHistoryPositionInput(PositionInput):
+    model_config = ConfigDict(extra="forbid")
+    position: str | None = Field(max_length=100)
 
 
 class ApplicationStatusPatch(CamelModel):
@@ -52,7 +72,7 @@ class RoundCreate(CamelModel):
     review_note: str | None = None
 
 
-class RoundUpdate(CamelModel):
+class RoundUpdate(PositionInput):
     model_config = ConfigDict(extra="forbid")
 
     round_type: Literal[ROUND_TYPES] | None = None

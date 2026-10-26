@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.jobs.constants import ROUND_TYPE_LABELS, ROUND_TYPE_STATUS, STATUS_FLOW, STATUS_LABELS
@@ -22,6 +22,7 @@ from app.modules.jobs.schemas import (
     OfferDecisionPatch,
     RoundCreate,
     RoundUpdate,
+    StatusHistoryPositionInput,
 )
 
 
@@ -61,8 +62,48 @@ def get_application(db: Session, app_id: int) -> Application:
     return app_row
 
 
+def _new_stage(db: Session, row: Application, status: str, when: datetime) -> StatusHistory:
+    stage = StatusHistory(status=status, changed_at=when, position=row.position, position_version=row.position_version)
+    row.status_history.append(stage)
+    db.flush()
+    return stage
+
+
+def _current_stage(db: Session, row: Application, when: datetime) -> StatusHistory:
+    latest = max(row.status_history, key=lambda h: (h.changed_at, h.id), default=None)
+    if latest and latest.status == row.status and latest.position_version == row.position_version and latest.position == row.position:
+        return latest
+    return _new_stage(db, row, row.status, when)
+
+
+def _current_round(round_row: InterviewRound, app_row: Application) -> bool:
+    return round_row.position_version == app_row.position_version and (
+        round_row.position is None or round_row.position == app_row.position
+    )
+
+
+def _round_stage(db: Session, round_row: InterviewRound, app_row: Application, when: datetime) -> StatusHistory | None:
+    if _current_round(round_row, app_row):
+        return _current_stage(db, app_row, when)
+    if round_row.status_history_id:
+        return db.get(StatusHistory, round_row.status_history_id)
+    candidates = [h for h in app_row.status_history if h.position_version == round_row.position_version
+                  and h.status == ROUND_TYPE_STATUS.get(round_row.round_type) and h.changed_at <= when
+                  and (not h.position or not round_row.position or h.position == round_row.position)]
+    return max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
+
+
+def _record_result(db: Session, round_row: InterviewRound, stage: StatusHistory | None,
+                   old_result: str | None, when: datetime) -> None:
+    db.add(RoundResultHistory(round_id=round_row.id, application_id=round_row.application_id,
+        status=stage.status if stage else ROUND_TYPE_STATUS.get(round_row.round_type, "screening"),
+        status_history_id=stage.id if stage else None, position=round_row.position,
+        position_version=round_row.position_version, from_result=old_result,
+        to_result=round_row.result, changed_at=when))
+
+
 def _sync_rounds_on_status_change(
-    db: Session, row: Application, old_status: str, new_status: str
+    db: Session, row: Application, old_status: str, new_status: str, stage: StatusHistory, when: datetime
 ) -> None:
     """状态正向推进时，把当前最新轮次置为「通过」（进入了下一环节 = 上一环节通过）。
     边界：倒退/平移不联动；「未通过」是用户录入的事实不覆盖；无轮次静默跳过。
@@ -72,30 +113,27 @@ def _sync_rounds_on_status_change(
         return
     if STATUS_FLOW.index(new_status) <= STATUS_FLOW.index(old_status):
         return
-    if row.rounds:
-        latest = max(row.rounds, key=lambda r: r.id)
+    current_rounds = [r for r in row.rounds if _current_round(r, row)]
+    if current_rounds:
+        latest = max(current_rounds, key=lambda r: r.id)
         if latest.result in ("not_started", "completed", "not_attended"):
             old = latest.result
             latest.result = "passed"
-            db.add(
-                RoundResultHistory(
-                    round_id=latest.id,
-                    application_id=row.id,
-                    status=new_status,  # 联动发生时状态正在推进，归属新状态
-                    from_result=old,
-                    to_result="passed",
-                )
-            )
+            latest.result_changed_at = when
+            _record_result(db, latest, stage, old, when)
 
 
 def create_application(db: Session, data: ApplicationCreate) -> Application:
-    row = Application(**data.model_dump())
+    row = Application(**data.model_dump(), position_version=1)
+    db.add(row)
+    db.flush()
     # 初始状态也记一条历史（如：投递中 → 2026-09-10 15:30）
-    row.status_history.append(StatusHistory(status=row.status))
+    stage = _new_stage(db, row, row.status, datetime.now())
     # 初筛状态下自动添加默认的「初筛」轮次：流程时间线从投递创建即有起点
     # （结果未开始、时间待定，后续可编辑；状态推进到复筛时会被联动置「通过」）
     if row.status == "screening":
-        row.rounds.append(InterviewRound(round_type="screening", result="not_started"))
+        row.rounds.append(InterviewRound(round_type="screening", result="not_started", position=row.position,
+                                       position_version=row.position_version, status_history_id=stage.id))
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -105,13 +143,34 @@ def create_application(db: Session, data: ApplicationCreate) -> Application:
 def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> Application:
     row = get_application(db, app_id)
     updates = data.model_dump(exclude_unset=True)
-    new_status = updates.get("status")
+    restart = updates.pop("restart_process", False)
+    expected = updates.pop("expected_position_version", None)
+    if expected is not None and expected != row.position_version:
+        raise HTTPException(409, "岗位已在其他操作中变更，请刷新记录后重试")
+    position_changed = "position" in updates and updates["position"] != (row.position.strip() or None if row.position else None)
+    new_position_period = position_changed or restart
+    when = datetime.now()
     old_status = row.status  # 先取旧状态（setattr 会覆盖）
+    if new_position_period:
+        previous_version = row.position_version
+        result = db.execute(update(Application).where(Application.id == row.id,
+            Application.position_version == previous_version).values(position_version=previous_version + 1))
+        if result.rowcount != 1:
+            db.rollback()
+            raise HTTPException(409, "岗位已变更，请刷新记录后重试")
+        row.position_version = previous_version + 1
+        row.offer_decision = None
+    if restart:
+        updates["status"] = "screening"
     for key, value in updates.items():
         setattr(row, key, value)
-    if new_status is not None and new_status != old_status:
-        _sync_rounds_on_status_change(db, row, old_status, new_status)
-        row.status_history.append(StatusHistory(status=new_status))
+    if new_position_period or row.status != old_status:
+        stage = _new_stage(db, row, row.status, when)
+        if not new_position_period:
+            _sync_rounds_on_status_change(db, row, old_status, row.status, stage, when)
+        elif row.status == "screening":
+            row.rounds.append(InterviewRound(round_type="screening", result="not_started", position=row.position,
+                position_version=row.position_version, status_history_id=stage.id))
     db.commit()
     db.refresh(row)
     return row
@@ -120,9 +179,10 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
 def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Application:
     row = get_application(db, app_id)
     if row.status != data.status:
-        _sync_rounds_on_status_change(db, row, row.status, data.status)
+        when, old_status = datetime.now(), row.status
         row.status = data.status
-        row.status_history.append(StatusHistory(status=data.status))
+        stage = _new_stage(db, row, data.status, when)
+        _sync_rounds_on_status_change(db, row, old_status, data.status, stage, when)
         db.commit()
         db.refresh(row)
     return row
@@ -171,13 +231,18 @@ def _check_round_type_status(round_type: str, app_status: str) -> None:
 def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     app_row = get_application(db, app_id)  # 确认父记录存在
     _check_round_type_status(data.round_type, app_row.status)
+    when = datetime.now()
+    stage = _current_stage(db, app_row, when)
     payload = data.model_dump()
     start_at = payload.pop("start_at")
     duration_minutes = payload.pop("duration_minutes")
     # 创建时若结果已不再是「未开始」，记录结果变更时间
-    result_changed_at = datetime.now() if payload.get("result", "not_started") != "not_started" else None
+    result_changed_at = when if payload.get("result", "not_started") != "not_started" else None
     row = InterviewRound(
         application_id=app_id,
+        position=app_row.position,
+        position_version=app_row.position_version,
+        status_history_id=stage.id,
         start_at=start_at,
         duration_minutes=duration_minutes,
         scheduled_at=_deadline(start_at, duration_minutes),
@@ -188,15 +253,7 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     db.flush()  # 先取 row.id 供结果历史引用
     # 创建即有结果：记一条初始结果变化（from 为空）
     if result_changed_at is not None:
-        db.add(
-            RoundResultHistory(
-                round_id=row.id,
-                application_id=app_id,
-                status=app_row.status,
-                from_result=None,
-                to_result=row.result,
-            )
-        )
+        _record_result(db, row, stage, None, when)
     db.commit()
     db.refresh(row)
     return row
@@ -215,8 +272,10 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
     # 改轮次类型时同样校验状态匹配
     new_type = updates.get("round_type") or row.round_type
     app_row = db.get(Application, row.application_id)
-    if app_row is not None:
-        _check_round_type_status(new_type, app_row.status)
+    when = datetime.now()
+    if app_row is not None and new_type != row.round_type:
+        stage = _round_stage(db, row, app_row, when)
+        _check_round_type_status(new_type, stage.status if stage else ROUND_TYPE_STATUS.get(row.round_type, app_row.status))
     # 开始时间或持续时间变化时，重算截止时间
     if "start_at" in updates or "duration_minutes" in updates:
         updates["scheduled_at"] = _deadline(
@@ -228,17 +287,17 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
     old_result = row.result
     for key, value in updates.items():
         setattr(row, key, value)
+    if "position" in updates:
+        stage = db.get(StatusHistory, row.status_history_id) if row.status_history_id else None
+        snapshot_updates = {"position": row.position}
+        if stage and stage.position and stage.position != row.position:
+            row.status_history_id = None
+            snapshot_updates["status_history_id"] = None
+        db.execute(update(RoundResultHistory).where(RoundResultHistory.round_id == row.id).values(**snapshot_updates))
     if new_result is not None and new_result != old_result:
-        row.result_changed_at = datetime.now()
-        db.add(
-            RoundResultHistory(
-                round_id=row.id,
-                application_id=row.application_id,
-                status=app_row.status if app_row is not None else "",
-                from_result=old_result,
-                to_result=new_result,
-            )
-        )
+        row.result_changed_at = when
+        stage = _round_stage(db, row, app_row, when) if app_row else None
+        _record_result(db, row, stage, old_result, when)
     db.commit()
     db.refresh(row)
     return row
@@ -257,6 +316,19 @@ def delete_status_history(db: Session, history_id: int) -> None:
         raise HTTPException(status_code=404, detail="记录不存在")
     db.delete(row)
     db.commit()
+
+
+def update_status_position(db: Session, history_id: int, data: StatusHistoryPositionInput) -> StatusHistory:
+    row = db.get(StatusHistory, history_id)
+    if row is None:
+        raise HTTPException(404, "记录不存在")
+    row.position = data.position
+    # 用户主动补录该阶段时，同步其轮次与结果快照；不改当前岗位或其他阶段。
+    for model in (InterviewRound, RoundResultHistory):
+        db.execute(update(model).where(model.status_history_id == row.id).values(position=data.position))
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def delete_result_history(db: Session, history_id: int) -> None:

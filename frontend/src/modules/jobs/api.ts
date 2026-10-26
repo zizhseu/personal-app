@@ -1,5 +1,5 @@
 import request from '@/shared/api/request'
-import type { Application, ApplicationPayload, RoundPayload, ScheduleEvent, EventPayload } from './types'
+import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, ScheduleEvent, EventPayload } from './types'
 
 /** jobs 模块全部接口调用 */
 
@@ -17,7 +17,7 @@ export function createApplication(payload: ApplicationPayload): Promise<Applicat
 
 export function updateApplication(
   id: number,
-  payload: Partial<ApplicationPayload>,
+  payload: ApplicationUpdatePayload,
 ): Promise<Application> {
   return request.put(`/jobs/applications/${id}`, payload) as Promise<Application>
 }
@@ -65,6 +65,10 @@ export function deleteRound(roundId: number): Promise<void> {
 
 export function deleteStatusHistory(historyId: number): Promise<void> {
   return request.delete(`/jobs/status-history/${historyId}`) as Promise<void>
+}
+
+export function updateStatusPosition(historyId: number, position: string | null): Promise<Application['statusHistory'][number]> {
+  return request.patch(`/jobs/status-history/${historyId}/position`, { position }) as Promise<Application['statusHistory'][number]>
 }
 
 export function deleteResultHistory(historyId: number): Promise<void> {

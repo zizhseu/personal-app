@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     :title="isEdit ? '编辑投递' : '新增投递'"
-    width="560px"
+    width="min(560px, calc(100vw - 32px))"
     :close-on-click-modal="false"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
@@ -10,7 +10,9 @@
         <el-input v-model="form.company" placeholder="公司名称" />
       </el-form-item>
       <el-form-item label="岗位" prop="position">
-        <el-input v-model="form.position" placeholder="岗位名称（选填）" />
+        <el-input v-model="form.position" maxlength="100" placeholder="岗位名称（选填）" />
+        <div v-if="isEdit" class="position-hint">之前的阶段会保留当时岗位，更改此处不会覆盖历史。</div>
+        <el-checkbox v-if="positionChanged && form.position?.trim()" v-model="restartProcess">新岗位重新从初筛开始</el-checkbox>
       </el-form-item>
       <el-form-item label="投递链接">
         <el-input v-model="form.url" placeholder="招聘页面 / JD 链接（选填，如 https://...）">
@@ -47,7 +49,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="当前状态">
-        <el-select v-model="form.status" style="width: 100%">
+        <el-select v-model="form.status" :disabled="positionChanged && restartProcess" style="width: 100%">
           <el-option
             v-for="s in STATUS_ORDER"
             :key="s"
@@ -85,6 +87,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 
 const isEdit = computed(() => !!props.application?.id)
+const restartProcess = ref(false)
+let expectedVersion = 1
 
 const emptyForm = (): ApplicationPayload => ({
   company: '',
@@ -98,11 +102,14 @@ const emptyForm = (): ApplicationPayload => ({
 })
 
 const form = reactive<ApplicationPayload>(emptyForm())
+const positionChanged = computed(() => isEdit.value && (form.position?.trim() || null) !== (props.application?.position?.trim() || null))
 
 watch(visible, (v) => {
   if (v) {
     // 只拷贝表单关心的字段，避免把 id/rounds/createdAt 等额外属性带进 payload
     const a = props.application
+    restartProcess.value = false
+    expectedVersion = a?.positionVersion ?? 1
     Object.assign(form, emptyForm(), {
       company: a?.company ?? '',
       position: a?.position ?? null,
@@ -134,7 +141,7 @@ async function save() {
       base: form.base?.length ? form.base : null,
     }
     if (isEdit.value) {
-      await store.update(props.application!.id, payload)
+      await store.update(props.application!.id, { ...payload, restartProcess: positionChanged.value && restartProcess.value, expectedPositionVersion: expectedVersion })
     } else {
       await store.create(payload)
     }
@@ -145,3 +152,7 @@ async function save() {
   }
 }
 </script>
+
+<style scoped>
+.position-hint { color: var(--ink-3); font-size: 12px; line-height: 1.7; margin-top: 5px; }
+</style>

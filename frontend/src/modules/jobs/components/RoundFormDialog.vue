@@ -2,10 +2,14 @@
   <el-dialog
     v-model="visible"
     :title="isEdit ? '编辑轮次' : '添加轮次'"
-    width="520px"
+    width="min(520px, calc(100vw - 32px))"
     :close-on-click-modal="false"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+      <el-form-item v-if="isEdit" label="此轮岗位">
+        <el-input v-model="form.position" maxlength="100" placeholder="岗位名称（未知时可补录）" aria-label="此轮岗位" />
+        <div class="type-hint">用于补录或更正本轮历史岗位，不会更换当前岗位。</div>
+      </el-form-item>
       <el-form-item label="轮次类型" prop="roundType">
         <el-select v-model="form.roundType" style="width: 100%">
           <el-option v-for="t in allowedTypes" :key="t" :label="ROUND_TYPE_LABELS[t]" :value="t" />
@@ -72,6 +76,7 @@ import {
   OFFER_RESULT_OPTIONS,
 } from '../constants'
 import { useJobsStore } from '../store'
+import { isCurrentRound } from '../selectors'
 
 const props = defineProps<{
   applicationId: number
@@ -88,13 +93,19 @@ const saving = ref(false)
 const isEdit = computed(() => !!props.round?.id)
 
 const app = computed(() => store.applications.find((a) => a.id === props.applicationId))
+const effectiveStatus = computed(() => {
+  if (props.round && app.value && !isCurrentRound(props.round, app.value)) {
+    return app.value.statusHistory.find(row => row.id === props.round?.statusHistoryId)?.status ?? ROUND_TYPE_STATUS[props.round.roundType] ?? app.value.status
+  }
+  return app.value?.status
+})
 
 /** 当前状态下允许的轮次类型（硬约束：轮次需与状态匹配；「其他」不限） */
 const allowedTypes = computed<RoundType[]>(() => {
   const all = Object.keys(ROUND_TYPE_LABELS) as RoundType[]
   const allowed = all.filter((t) => {
     const required = ROUND_TYPE_STATUS[t]
-    return required === null || required === app.value?.status
+    return required === null || required === effectiveStatus.value
   })
   // 编辑时保留原类型可选（用户可能后来改过状态）
   const cur = props.round?.roundType
@@ -104,7 +115,7 @@ const allowedTypes = computed<RoundType[]>(() => {
 
 /** 当前状态下可选的结果（Offer 态仅接受 / 拒绝；编辑时保留原结果可见） */
 const resultOptions = computed<RoundResult[]>(() => {
-  const opts = [...(app.value?.status === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
+  const opts = [...(effectiveStatus.value === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
   const cur = props.round?.result
   if (cur && !opts.includes(cur)) opts.push(cur)
   return opts
@@ -143,6 +154,7 @@ watch(visible, (v) => {
     const r = props.round
     Object.assign(form, emptyForm(), {
       roundType: r?.roundType ?? allowedTypes.value[0] ?? 'other',
+      position: r ? r.position : undefined,
       // 老数据只有「计划时间」：回填为开始时间
       startAt: r?.startAt ?? r?.scheduledAt ?? (r ? null : nowStr()),
       durationMinutes: r ? (r.durationMinutes ?? null) : DEFAULT_DURATION_MINUTES,

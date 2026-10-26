@@ -33,6 +33,9 @@ export interface InterviewRound {
   id: number
   applicationId: number
   roundType: RoundType
+  position: string | null
+  positionVersion: number
+  statusHistoryId: number | null
   startAt: string | null
   durationMinutes: number | null
   /** 截止时间 = 开始时间 + 持续时间（后端自动计算） */
@@ -50,6 +53,8 @@ export interface StatusHistory {
   id: number
   applicationId: number
   status: ApplicationStatus
+  position: string | null
+  positionVersion: number
   changedAt: string
   createdAt: string
   updatedAt: string
@@ -61,6 +66,9 @@ export interface RoundResultChange {
   roundId: number
   /** 变化发生时的投递状态（归属到状态变化的哪一条） */
   status: ApplicationStatus
+  position: string | null
+  positionVersion: number
+  statusHistoryId: number | null
   roundType: string
   fromResult: RoundResult | null
   toResult: RoundResult
@@ -74,6 +82,7 @@ export interface Application {
   id: number
   company: string
   position: string | null
+  positionVersion: number
   url: string | null
   applyDate: string | null
   salary: string | null
@@ -103,9 +112,15 @@ export interface ApplicationPayload {
   note?: string | null
 }
 
+export type ApplicationUpdatePayload = Partial<ApplicationPayload> & {
+  restartProcess?: boolean
+  expectedPositionVersion?: number
+}
+
 /** 新增/编辑轮次表单（截止时间由后端按 开始+持续 计算，不直接提交） */
 export interface RoundPayload {
   roundType: RoundType
+  position?: string | null
   startAt?: string | null
   durationMinutes?: number | null
   result?: RoundResult

@@ -61,6 +61,17 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE application ADD COLUMN base JSON"))
             conn.commit()
 
+        # 岗位代次隔离重复改投，快照保留当时岗位；旧历史不按当前岗位猜测补值。
+        for table in ("application", "interview_round", "status_history", "round_result_history"):
+            position_cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            if "position_version" not in position_cols:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN position_version INTEGER NOT NULL DEFAULT 1"))
+            if table != "application" and "position" not in position_cols:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN position VARCHAR(100)"))
+            if table in ("interview_round", "round_result_history") and "status_history_id" not in position_cols:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status_history_id INTEGER REFERENCES status_history(id) ON DELETE SET NULL"))
+        conn.commit()
+
         # 地点字段已并入 Base：老数据的 location 按分隔符拆分迁入 base（仅处理 base 为空的行）
         import json as _json
         import re as _re
@@ -298,3 +309,37 @@ def init_db() -> None:
                 )
             )
         conn.commit()
+        _link_position_stages(conn)
+
+
+def _link_position_stages(conn) -> None:
+    """仅补可确定的阶段关联，不把当前岗位伪装成历史岗位。"""
+    from sqlalchemy import text
+    from app.modules.jobs.constants import ROUND_TYPE_STATUS
+
+    flag = "position_history_20261026"
+    if conn.scalar(text("SELECT COUNT(*) FROM _migration_flags WHERE name = :flag"), {"flag": flag}):
+        return
+    cases = " ".join(f"WHEN '{kind}' THEN '{status}'" for kind, status in ROUND_TYPE_STATUS.items())
+    conn.execute(text(f"""
+        UPDATE interview_round SET status_history_id = (
+            SELECT h.id FROM status_history h
+            WHERE h.application_id = interview_round.application_id
+              AND h.position_version = interview_round.position_version
+              AND h.status = CASE interview_round.round_type {cases} ELSE h.status END
+              AND REPLACE(h.changed_at, 'T', ' ') <= REPLACE(interview_round.created_at, 'T', ' ')
+            ORDER BY h.changed_at DESC, h.id DESC LIMIT 1
+        ) WHERE status_history_id IS NULL
+    """))
+    conn.execute(text("""
+        UPDATE round_result_history SET status_history_id = (
+            SELECT h.id FROM status_history h
+            WHERE h.application_id = round_result_history.application_id
+              AND h.position_version = round_result_history.position_version
+              AND h.status = round_result_history.status
+              AND REPLACE(h.changed_at, 'T', ' ') <= REPLACE(round_result_history.changed_at, 'T', ' ')
+            ORDER BY h.changed_at DESC, h.id DESC LIMIT 1
+        ) WHERE status_history_id IS NULL
+    """))
+    conn.execute(text("INSERT INTO _migration_flags(name) VALUES (:flag)"), {"flag": flag})
+    conn.commit()

@@ -48,6 +48,7 @@
 </template>
 
 <script setup lang="ts">
+import { positionLabel } from '../selectors'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
@@ -90,7 +91,7 @@ const roundItems = computed<ScheduleItem[]>(() => {
           doneAt: round.result !== 'not_started' ? round.resultChangedAt : null,
           time: dayjs(displayTime).format('MM-DD HH:mm'),
           typeLabel: ROUND_TYPE_LABELS[round.roundType],
-          title: `${app.company}${app.position ? ` · ${app.position}` : ''}`,
+          title: `${app.company} · ${positionLabel(round.position)}`,
           location: null,
           round,
           applicationId: app.id,
