@@ -2,7 +2,9 @@
 
 ## 使用
 
-同一家公司的一条求职记录可以经历多个岗位。详情顶部显示当前岗位，下方轮次和状态历史分别显示该阶段当时的岗位。
+同一家公司的一条求职记录可以经历多个岗位。详情顶部显示当前岗位，下方以岗位流程列表组织记录，每个岗位独立包含「流程轮次」和「状态变化」。当前岗位排在最前并默认展开，历史岗位可分别展开；「展开全部」便于对照，「仅展开当前」收起历史。
+
+同名再次投递也分成不同流程，不会将 A → B → A 合并成同一组。岗位名称未记录的旧数据单独显示，仍可补录；只有结果、无法归属阶段的记录也保留在对应岗位下。宽屏在组内并列显示轮次与状态，窄屏上下排列，主页面继续使用完整内容宽度。
 
 例如：
 
@@ -53,4 +55,4 @@
 
 `PUT /api/jobs/applications/{id}` 新增可选的 `restartProcess` 和 `expectedPositionVersion`。`PATCH /api/jobs/status-history/{id}/position` 保存 `{position}`，轮次更新支持可选 `{position}`；岗位长度上限为 100 字。阶段删除后关联置空，岗位快照保留；删除整条投递时仍按原级联关系清理其历史。
 
-源码见 [业务逻辑](../backend/app/modules/jobs/service.py)、[数据库迁移](../backend/app/core/database.py)、[详情页](../frontend/src/modules/jobs/views/ApplicationDetailView.vue)、[历史归属](../frontend/src/modules/jobs/history.ts)。验证范围见 [验证记录](validation-position-history-2026-10-26.md)。
+源码见 [业务逻辑](../backend/app/modules/jobs/service.py)、[数据库迁移](../backend/app/core/database.py)、[详情页](../frontend/src/modules/jobs/views/ApplicationDetailView.vue)、[岗位分组](../frontend/src/modules/jobs/components/PositionHistoryGroup.vue)、[历史归属](../frontend/src/modules/jobs/history.ts)。数据功能验证见 [2026-10-26 验证记录](validation-position-history-2026-10-26.md)，列表分组验证见 [2026-11-02 验证记录](validation-position-groups-2026-11-02.md)。

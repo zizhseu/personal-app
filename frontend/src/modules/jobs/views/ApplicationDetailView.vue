@@ -65,131 +65,31 @@
       </div>
     </el-card>
 
-    <!-- 流程轮次 + 状态变化（左右并列） -->
-    <div class="bottom-row">
-      <el-card shadow="never" class="rounds-card">
-        <template #header>
-          <div class="card-header">
-            <span>流程轮次（{{ app.rounds.length }}）</span>
-            <el-button type="primary" icon="Plus" @click="openAddRound">添加轮次</el-button>
-          </div>
-        </template>
-
-        <el-timeline v-if="app.rounds.length > 0" class="timeline">
-          <el-timeline-item
-            v-for="round in app.rounds"
-            :key="round.id"
-            :timestamp="roundTimeText(round)"
-            :type="timelineType(round.result)"
-            :hollow="round.result === 'not_started'"
-            placement="top"
-          >
-            <div class="round-item">
-              <div class="round-head">
-                <span class="round-name">{{ ROUND_TYPE_LABELS[round.roundType] }}</span>
-                <el-tag class="position-badge" size="small" type="info" effect="plain">{{ positionLabel(round.position) }}</el-tag>
-                <el-tag
-                  :color="RESULT_COLORS[round.result]"
-                  effect="dark"
-                  size="small"
-                  disable-transitions
-                  class="result-tag"
-                >
-                  {{ RESULT_LABELS[round.result] }}
-                </el-tag>
-                <span class="round-actions">
-                  <el-button link type="primary" size="small" @click="openEditRound(round)">
-                    编辑
-                  </el-button>
-                  <el-button link type="danger" size="small" @click="confirmRemoveRound(round)">
-                    删除
-                  </el-button>
-                </span>
-              </div>
-              <div v-if="round.resultChangedAt" class="round-result-time">
-                结果更新于 {{ formatDateTime(round.resultChangedAt) }}
-              </div>
-              <div v-if="round.reviewNote" class="round-note">{{ round.reviewNote }}</div>
-              <div v-else class="round-note empty">暂无复盘笔记</div>
-            </div>
-          </el-timeline-item>
-        </el-timeline>
-        <el-empty
-          v-else
-          description="还没有流程轮次，点击右上角「添加轮次」记录测评 / 笔试 / 面试安排"
-        />
-      </el-card>
-
-      <!-- 状态变化 -->
-      <el-card v-if="app.statusHistory.length > 0 || groupedResults.unassigned.length" shadow="never" class="history-card">
-        <template #header>
-          <div class="card-header">
-            <span>状态变化</span>
-            <span class="header-hint">自动记录</span>
-          </div>
-        </template>
-        <div class="history-list">
-          <div v-for="(h, index) in app.statusHistory" :key="h.id" class="history-group">
-            <p v-if="index > 0 && h.positionVersion !== app.statusHistory[index - 1]?.positionVersion" class="position-transition">岗位变更 · {{ positionLabel(h.position) }}</p>
-            <!-- 一级：状态变化（目录行，有结果变化时可展开） -->
-            <div
-              class="history-row"
-              :class="{ expandable: resultChangesOf(h).length > 0, open: expandedHistory.has(h.id) }"
-              @click="toggleHistory(h, resultChangesOf(h).length)"
-            >
-              <span class="caret-slot">
-                <el-icon
-                  v-if="resultChangesOf(h).length"
-                  class="expand-caret"
-                  :class="{ open: expandedHistory.has(h.id) }"
-                >
-                  <CaretRight />
-                </el-icon>
-              </span>
-              <div class="history-label">
-                <StatusTag :status="h.status" />
-                <el-button link size="small" class="stage-position" :title="'补录或更正该阶段岗位：' + positionLabel(h.position)" @click.stop="editStagePosition(h)">{{ h.position || '补录岗位' }}</el-button>
-              </div>
-              <span class="spacer" />
-              <span class="history-time">{{ formatDateTime(h.changedAt) }}</span>
-              <el-icon class="row-remove" title="删除此条状态记录" @click.stop="removeStatusRow(h)">
-                <Close />
-              </el-icon>
-            </div>
-            <!-- 二级目录：该状态期间发生的轮次结果变化 -->
-            <div v-if="expandedHistory.has(h.id)" class="result-changes">
-              <div v-for="rc in resultChangesOf(h)" :key="rc.id" class="result-change-row">
-                <span class="rc-round">{{ roundTypeLabel(rc.roundType) }}</span>
-                <span v-if="rc.position && rc.position !== h.position" class="rc-position">{{ rc.position }}</span>
-                <el-tag
-                  size="small"
-                  effect="dark"
-                  disable-transitions
-                  class="rc-tag"
-                  :color="RESULT_COLORS[rc.toResult]"
-                >
-                  {{ RESULT_LABELS[rc.toResult] }}
-                </el-tag>
-                <span class="spacer" />
-                <span class="rc-time">{{ formatShortDateTime(rc.changedAt) }}</span>
-                <el-icon class="row-remove" title="删除此条结果记录" @click="removeResultRow(rc)">
-                  <Close />
-                </el-icon>
-              </div>
-            </div>
-          </div>
-          <template v-if="groupedResults.unassigned.length">
-            <p class="position-transition">未归属阶段的结果记录</p>
-            <div v-for="rc in groupedResults.unassigned" :key="rc.id" class="result-change-row">
-              <span class="rc-round">{{ roundTypeLabel(rc.roundType) }} · {{ positionLabel(rc.position) }}</span>
-              <el-tag size="small" effect="plain" :color="RESULT_COLORS[rc.toResult]">{{ RESULT_LABELS[rc.toResult] }}</el-tag>
-              <span class="spacer" /><span class="rc-time">{{ formatShortDateTime(rc.changedAt) }}</span>
-              <el-icon class="row-remove" title="删除此条结果记录" @click="removeResultRow(rc)"><Close /></el-icon>
-            </div>
-          </template>
+    <!-- 每次岗位流程独立成组，轮次与状态变化在组内展示。 -->
+    <section class="position-section" aria-labelledby="position-history-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="position-history-title">岗位历程</h2>
+          <p>按岗位查看流程轮次、状态变化与复盘</p>
         </div>
-      </el-card>
-    </div>
+        <el-button v-if="positionGroups.length > 1" link type="primary" @click="toggleAllPositions">{{ allPositionsExpanded ? '仅展开当前' : '展开全部' }}</el-button>
+      </div>
+      <div class="position-list">
+        <PositionHistoryGroup
+          v-for="group in positionGroups"
+          :key="`${app.id}:${group.key}`"
+          :group="group"
+          :expanded="expandedPositions.has(group.key)"
+          @toggle="togglePosition(group.key)"
+          @add-round="openAddRound"
+          @edit-round="openEditRound"
+          @remove-round="confirmRemoveRound"
+          @edit-stage="editStagePosition"
+          @remove-stage="removeStatusRow"
+          @remove-result="removeResultRow"
+        />
+      </div>
+    </section>
 
     <ApplicationFormDialog v-model="editVisible" :application="app" />
     <PositionChangeDialog v-model="positionVisible" :application="app" />
@@ -202,21 +102,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { ArrowRight, CaretRight, Close } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { CaretBottom, Link } from '@element-plus/icons-vue'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import RoundFormDialog from '../components/RoundFormDialog.vue'
 import PositionChangeDialog from '../components/PositionChangeDialog.vue'
-import { positionLabel } from '../selectors'
-import { groupResultChanges } from '../history'
-import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS, STATUS_LABELS, STATUS_ORDER } from '../constants'
-import { formatDateTime } from '@/shared/utils/format'
+import PositionHistoryGroup from '../components/PositionHistoryGroup.vue'
+import { groupPositionHistory } from '../history'
+import { STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { useJobsStore } from '../store'
-import type { ApplicationStatus, InterviewRound, RoundResultChange, RoundType, StatusHistory } from '../types'
+import type { ApplicationStatus, InterviewRound, RoundResultChange, StatusHistory } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -231,36 +129,41 @@ const editVisible = ref(false)
 const positionVisible = ref(false)
 const roundVisible = ref(false)
 const editingRound = ref<InterviewRound | null>(null)
-
 onMounted(() => store.ensureLoaded())
+const app = computed(() => store.applications.find(row => row.id === Number(route.params.id)))
+const positionGroups = computed(() => app.value ? groupPositionHistory(app.value) : [])
+const expandedPositions = ref(new Set<string>())
+let expandedApplicationId: number | undefined
+const allPositionsExpanded = computed(() => positionGroups.value.every(group => expandedPositions.value.has(group.key)))
 
-const app = computed(() =>
-  store.applications.find((a) => a.id === Number(route.params.id)),
-)
+watch(positionGroups, (groups, previousGroups) => {
+  if (expandedApplicationId !== app.value?.id) {
+    // 新打开详情时只展开当前岗位；同一详情内的刷新保留用户的展开选择。
+    expandedApplicationId = app.value?.id
+    expandedPositions.value = new Set(groups.filter(group => group.isCurrent).map(group => group.key))
+    return
+  }
+  const keys = new Set(groups.map(group => group.key))
+  const previousKeys = new Set((previousGroups ?? []).map(group => group.key))
+  const expanded = new Set([...expandedPositions.value].filter(key => keys.has(key)))
+  // 换岗位或补录导致新分组出现时，展开该组以显示刚保存的内容。
+  for (const group of groups) if (!previousKeys.has(group.key)) expanded.add(group.key)
+  expandedPositions.value = expanded
+}, { immediate: true })
+
+function togglePosition(key: string) {
+  const next = new Set(expandedPositions.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedPositions.value = next
+}
+
+function toggleAllPositions() {
+  expandedPositions.value = new Set(positionGroups.value.filter(group => !allPositionsExpanded.value || group.isCurrent).map(group => group.key))
+}
 
 async function quickSetStatus(status: ApplicationStatus) {
   if (app.value) await store.quickSetStatus(app.value.id, status)
-}
-
-function roundTypeLabel(type: string): string {
-  return type in ROUND_TYPE_LABELS ? ROUND_TYPE_LABELS[type as RoundType] : type
-}
-
-function timelineType(result: InterviewRound['result']): 'primary' | 'success' | 'danger' {
-  if (result === 'passed') return 'success'
-  if (result === 'failed') return 'danger'
-  return 'primary'
-}
-
-/** 时间线时间文本：开始 · 截止（截止与开始相同则只显示一个） */
-function roundTimeText(round: InterviewRound): string {
-  const start = round.startAt ?? round.scheduledAt
-  const parts: string[] = []
-  if (start) parts.push(formatDateTime(start))
-  if (round.startAt && round.scheduledAt && round.scheduledAt !== round.startAt) {
-    parts.push(`截止 ${formatDateTime(round.scheduledAt)}`)
-  }
-  return parts.join(' · ') || '时间待定'
 }
 
 function openAddRound() {
@@ -273,313 +176,46 @@ function openEditRound(round: InterviewRound) {
   roundVisible.value = true
 }
 
-/** 短格式时间（二级内容空间紧凑用） */
-function formatShortDateTime(value?: string | null): string {
-  return value ? dayjs(value).format('MM-DD HH:mm') : '—'
-}
-
-/** 展开的结果变化目录（状态变化 id 集合，重建赋值保证响应性） */
-const expandedHistory = ref(new Set<number>())
-
-function toggleHistory(h: StatusHistory, count: number) {
-  if (count === 0) return
-  const next = new Set(expandedHistory.value)
-  if (next.has(h.id)) next.delete(h.id)
-  else next.add(h.id)
-  expandedHistory.value = next
-}
-
-/**
- * 结果优先归属保存的阶段标识；旧数据按岗位代次、状态与时间回退匹配。
- */
-const groupedResults = computed(() => groupResultChanges(app.value?.statusHistory ?? [], app.value?.resultHistory ?? []))
-
-function resultChangesOf(h: StatusHistory): RoundResultChange[] {
-  return groupedResults.value.groups.get(h.id) ?? []
-}
-
-async function editStagePosition(h: StatusHistory) {
+async function editStagePosition(stage: StatusHistory) {
   const position = await ElMessageBox.prompt('填写该阶段当时的岗位。会同步此阶段关联的轮次与结果记录，当前岗位保持不变。', '补录 / 更正历史岗位', {
-    inputValue: h.position ?? '', inputValidator: value => value.trim().length <= 100 || '岗位名称不能超过 100 字',
+    inputValue: stage.position ?? '', inputValidator: value => value.trim().length <= 100 || '岗位名称不能超过 100 字',
     confirmButtonText: '保存', cancelButtonText: '取消',
   }).then(result => result.value.trim() || null).catch(() => undefined)
-  if (position !== undefined) await store.updateStatusPosition(h.id, position)
+  if (position !== undefined) await store.updateStatusPosition(stage.id, position)
 }
 
-/** 手动删除一条状态变化记录（不影响投递当前状态） */
-async function removeStatusRow(h: StatusHistory) {
-  await store.removeStatusHistory(h.id)
+async function removeStatusRow(stage: StatusHistory) {
+  await store.removeStatusHistory(stage.id)
 }
 
-/** 手动删除一条结果变化记录（不影响轮次当前结果） */
-async function removeResultRow(rc: RoundResultChange) {
-  await store.removeResultHistory(rc.id)
+async function removeResultRow(result: RoundResultChange) {
+  await store.removeResultHistory(result.id)
 }
 
 async function confirmRemoveRound(round: InterviewRound) {
   const ok = await ElMessageBox.confirm('确定删除这一轮吗？', '删除确认', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
+    type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
   }).catch(() => false)
   if (ok) await store.removeRound(round.id)
 }
 </script>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.header {
-  padding: 4px 0;
-}
-
-.head-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.status-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.caret {
-  color: var(--ink-3);
-  font-size: 12px;
-}
-
-.title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
-}
-
-/* 轮次（左）+ 状态变化（右）并列；窗口太窄时换行堆叠 */
-.bottom-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.info-card,
-.rounds-card,
-.history-card {
-  border-radius: 8px;
-}
-
-.rounds-card {
-  flex: 1 1 480px;
-  min-width: 0;
-}
-
-.history-card {
-  width: min(420px, 100%);
-  flex-shrink: 0;
-}
-
-.jd-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--el-color-primary);
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
-.link-icon {
-  font-size: 12px;
-}
-
-.info-actions {
-  margin-top: 14px;
-  text-align: right;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-hint {
-  color: #9ca3af;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-}
-.history-label { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
-.stage-position { max-width: 180px; height: auto; padding: 2px 0; }
-.stage-position :deep(span) { white-space: normal; overflow-wrap: anywhere; text-align: left; line-height: 1.5; }
-.position-badge { max-width: 100%; white-space: normal; height: auto; overflow-wrap: anywhere; }
-.position-transition { color: var(--ink-2); font-size: 12px; line-height: 1.7; margin: 14px 0 4px; }
-.rc-position { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
-
-.history-row {
-  /* 弹性布局：箭头位固定宽 + 状态标签 + 撑开 + 时间右对齐，各级垂直对齐 */
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-radius: 6px;
-}
-
-.caret-slot {
-  width: 16px;
-  flex-shrink: 0;
-  display: inline-flex;
-  justify-content: center;
-}
-
-.history-row.expandable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.history-row.expandable:hover {
-  background: #f7f8fa;
-}
-
-.history-row :deep(.el-tag) {
-  flex-shrink: 0;
-}
-
-.history-group + .history-group .history-row {
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.history-time {
-  margin-left: auto;
-  color: #6b7280;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.expand-caret {
-  font-size: 12px;
-  color: #9ca3af;
-  transition: transform 0.15s ease;
-}
-
-.expand-caret.open {
-  transform: rotate(90deg);
-}
-
-/* 二级目录：该状态期间发生的轮次结果变化（树状层级线） */
-.result-changes {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-left: 8px;
-  padding: 2px 0 10px 18px;
-  border-left: 2px solid #e8eaed;
-}
-
-.result-change-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 3px 0;
-}
-
-.rc-round {
-  color: #6b7280;
-  font-size: 12.5px;
-  flex-shrink: 0;
-}
-
-.rc-tag {
-  border: none;
-  color: #fff;
-  font-weight: 600;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.rc-time {
-  color: #9ca3af;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* 一级 / 二级目录条目的手动删除按钮（常显） */
-.row-remove {
-  flex-shrink: 0;
-  font-size: 13px;
-  color: var(--ink-3);
-  cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
-  transition: color 0.15s ease;
-}
-
-.row-remove:hover {
-  color: var(--el-color-danger);
-  background: #f1f2f4;
-}
-
-.round-item {
-  padding-bottom: 4px;
-}
-
-.round-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.round-name {
-  font-weight: 600;
-}
-
-.result-tag {
-  border: none;
-  color: #fff;
-  font-weight: 600;
-  border-radius: 999px;
-}
-
-.round-actions {
-  margin-left: auto;
-}
-
-.round-result-time {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.round-note {
-  margin-top: 6px;
-  color: #4b5563;
-  white-space: pre-wrap;
-  font-size: 13px;
-}
-
-.round-note.empty {
-  color: #9ca3af;
-}
+.page { display: flex; flex-direction: column; min-width: 0; gap: 20px; }
+.header { padding: 4px 0; }
+.head-line { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.title { min-width: 0; overflow-wrap: anywhere; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+.status-trigger { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.caret { color: var(--ink-3); font-size: 12px; }
+.info-card { border-radius: 8px; }
+.info-card :deep(.el-descriptions__content) { overflow-wrap: anywhere; }
+.jd-link { display: inline-flex; align-items: center; gap: 2px; color: var(--el-color-primary); text-decoration: none; }
+.jd-link:hover { text-decoration: underline; }
+.link-icon { font-size: 12px; }
+.info-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.position-section { min-width: 0; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-heading h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
+.section-heading p { margin: 5px 0 0; color: var(--ink-3); font-size: 13px; line-height: 1.6; }
+.position-list { display: flex; flex-direction: column; gap: 12px; }
 </style>
