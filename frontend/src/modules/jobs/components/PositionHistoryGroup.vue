@@ -6,8 +6,9 @@
         <span class="position-identity">
           <el-icon class="position-caret" :class="{ open: expanded }"><ArrowRight /></el-icon>
           <span class="position-name">{{ positionLabel(group.position) }}</span>
-          <el-tag v-if="group.isCurrent" size="small" effect="plain">当前岗位</el-tag>
-          <span class="process-label">第 {{ group.positionVersion }} 次流程</span>
+          <el-tag v-if="group.isPrimary" size="small" effect="plain">主要岗位</el-tag>
+          <el-tag v-else-if="group.isCurrent" size="small" effect="plain" type="info">当前岗位</el-tag>
+          <span class="process-label">岗位记录 {{ group.displayOrder }}</span>
         </span>
         <span class="position-summary">
           <StatusTag v-if="group.status" :status="group.status" />
@@ -15,6 +16,7 @@
         </span>
       </button>
       </h3>
+      <el-button v-if="!group.isPrimary" link type="primary" class="primary-position" :loading="selecting" :disabled="selectionDisabled" @click="emit('selectPrimary')">设为主要</el-button>
       <el-button link type="danger" class="delete-position" :loading="deleting" @click="emit('removePosition')">删除岗位</el-button>
     </div>
 
@@ -99,11 +101,12 @@ import { formatDateTime } from '@/shared/utils/format'
 import type { PositionHistoryGroup } from '../history'
 import type { InterviewRound, RoundResultChange, RoundType, StatusHistory } from '../types'
 
-const props = defineProps<{ group: PositionHistoryGroup; expanded: boolean; deleting?: boolean }>()
+const props = defineProps<{ group: PositionHistoryGroup; expanded: boolean; deleting?: boolean; selecting?: boolean; selectionDisabled?: boolean }>()
 const emit = defineEmits<{
   toggle: []
   addRound: []
   removePosition: []
+  selectPrimary: []
   editRound: [round: InterviewRound]
   removeRound: [round: InterviewRound]
   editStage: [stage: StatusHistory]
@@ -149,6 +152,7 @@ function roundTimeText(round: InterviewRound): string {
 .position-heading { display: flex; align-items: center; }
 .position-title { flex: 1; min-width: 0; margin: 0; font-size: inherit; }
 .delete-position { flex-shrink: 0; margin: 0 16px 0 0; }
+.primary-position { flex-shrink: 0; margin: 0 12px 0 0; }
 .position-toggle {
   width: 100%;
   display: flex;

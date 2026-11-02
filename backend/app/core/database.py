@@ -61,6 +61,13 @@ def init_db() -> None:
             conn.execute(text("ALTER TABLE application ADD COLUMN base JSON"))
             conn.commit()
 
+        # 主要岗位仅保存列表展示选择，不重写当前岗位或历史快照。
+        if "primary_position" not in cols:
+            conn.execute(text("ALTER TABLE application ADD COLUMN primary_position VARCHAR(100)"))
+        if "primary_position_version" not in cols:
+            conn.execute(text("ALTER TABLE application ADD COLUMN primary_position_version INTEGER"))
+        conn.commit()
+
         # 岗位代次隔离重复改投，快照保留当时岗位；旧历史不按当前岗位猜测补值。
         for table in ("application", "interview_round", "status_history", "round_result_history"):
             position_cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}

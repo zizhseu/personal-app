@@ -84,6 +84,8 @@ export interface Application {
   position: string | null
   positionVersion: number
   hasCurrentPosition: boolean
+  positionSummaries?: PositionSummary[]
+  primaryPosition?: PositionSummary | null
   url: string | null
   applyDate: string | null
   salary: string | null
@@ -99,6 +101,27 @@ export interface Application {
   resultHistory: RoundResultChange[]
   createdAt: string
   updatedAt: string
+}
+
+export interface PositionSummary {
+  position: string | null
+  positionVersion: number
+  displayOrder: number
+  isCurrent: boolean
+  isPrimary: boolean
+  status: ApplicationStatus | null
+  result: RoundResult | null
+  offerDecision: 'accepted' | 'rejected_offer' | null
+  latestRoundId: number | null
+  roundIds: number[]
+  statusHistoryIds: number[]
+  resultHistoryIds: number[]
+}
+
+export interface PrimaryPositionPayload {
+  position: string | null
+  positionVersion: number
+  expectedPositionVersion: number
 }
 
 /** 新增/编辑投递表单（applyDate 传 YYYY-MM-DD 字符串） */

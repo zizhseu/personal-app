@@ -26,6 +26,8 @@ export interface PositionHistoryGroup {
   position: string | null
   positionVersion: number
   isCurrent: boolean
+  isPrimary: boolean
+  displayOrder: number
   status: ApplicationStatus | null
   rounds: InterviewRound[]
   statusHistory: StatusHistory[]
@@ -49,6 +51,7 @@ export function groupPositionHistory(application: Application): PositionHistoryG
     if (!group) {
       group = {
         key, position: recordedPosition(position), positionVersion: version, isCurrent: key === currentKey,
+        isPrimary: false, displayOrder: 0,
         status: null, rounds: [], statusHistory: [], resultHistory: [], resultGroups: new Map(), unassignedResults: [],
       }
       groups.set(key, group)
@@ -79,6 +82,18 @@ export function groupPositionHistory(application: Application): PositionHistoryG
     group.unassignedResults = group.resultHistory.filter(result => unassignedIds.has(result.id))
     group.status = group.isCurrent ? application.status : group.statusHistory.at(-1)?.status ?? group.resultHistory.at(-1)?.status ?? null
   }
-  return [...groups.values()].sort((left, right) => Number(right.isCurrent) - Number(left.isCurrent)
+  const values = [...groups.values()]
+  const firstTime = (group: PositionHistoryGroup) => Math.min(...[
+    ...group.statusHistory.map(item => item.changedAt), ...group.rounds.map(item => item.createdAt), ...group.resultHistory.map(item => item.changedAt),
+  ].filter(Boolean).map(value => new Date(value).getTime()), Infinity)
+  values.slice().sort((left, right) => left.positionVersion - right.positionVersion || firstTime(left) - firstTime(right)
+    || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0)).forEach((group, index) => {
+      const summary = application.positionSummaries?.find(item => groupKey(item.positionVersion, item.position) === group.key)
+      group.displayOrder = summary?.displayOrder ?? index + 1
+      group.isPrimary = summary?.isPrimary ?? (application.primaryPosition === undefined ? group.isCurrent
+        : !!application.primaryPosition && groupKey(application.primaryPosition.positionVersion, application.primaryPosition.position) === group.key)
+      if (summary) group.status = summary.status
+    })
+  return values.sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || Number(right.isCurrent) - Number(left.isCurrent)
     || right.positionVersion - left.positionVersion || Number(left.position == null) - Number(right.position == null))
 }

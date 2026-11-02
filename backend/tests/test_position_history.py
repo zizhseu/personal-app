@@ -289,6 +289,7 @@ class PositionMigrationTests(unittest.TestCase):
         with TemporaryDirectory() as directory, patch.object(database, 'engine', engine), patch.object(database, 'DATA_DIR', Path(directory)):
             database.init_db()
             with engine.begin() as conn:
+                self.assertEqual(conn.execute(text('SELECT primary_position, primary_position_version FROM application WHERE id=1')).one(), (None, None))
                 for table in ('status_history', 'interview_round', 'round_result_history'):
                     self.assertIsNone(conn.scalar(text(f'SELECT position FROM {table} WHERE id=1')))
                 self.assertEqual(conn.scalar(text('SELECT status_history_id FROM interview_round WHERE id=1')), 1)

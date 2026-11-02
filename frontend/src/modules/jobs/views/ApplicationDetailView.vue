@@ -73,7 +73,7 @@
       <div class="section-heading">
         <div>
           <h2 id="position-history-title">岗位历程</h2>
-          <p>按岗位查看流程轮次、状态变化与复盘</p>
+          <p>按岗位查看流程轮次、状态变化与复盘；主要岗位用于列表展示</p>
         </div>
         <el-button v-if="positionGroups.length > 1" link type="primary" @click="toggleAllPositions">{{ allPositionsExpanded ? '仅展开当前' : '展开全部' }}</el-button>
       </div>
@@ -84,9 +84,12 @@
           :group="group"
           :expanded="expandedPositions.has(group.key)"
           :deleting="deletingPositionKey === group.key"
+          :selecting="selectingPrimaryKey === group.key"
+          :selection-disabled="selectingPrimaryKey !== null || deletingPositionKey !== null"
           @toggle="togglePosition(group.key)"
           @add-round="openAddRound(group)"
           @remove-position="confirmRemovePosition(group)"
+          @select-primary="selectPrimaryPosition(group)"
           @edit-round="openEditRound"
           @remove-round="confirmRemoveRound"
           @edit-stage="editStagePosition"
@@ -141,6 +144,7 @@ const roundVisible = ref(false)
 const editingRound = ref<InterviewRound | null>(null)
 const roundTarget = ref<RoundTarget | null>(null)
 const deletingPositionKey = ref<string | null>(null)
+const selectingPrimaryKey = ref<string | null>(null)
 onMounted(() => store.ensureLoaded())
 const app = computed(() => store.applications.find(row => row.id === Number(route.params.id)))
 const hasActivePosition = computed(() => !!app.value && hasCurrentPosition(app.value))
@@ -151,9 +155,9 @@ const allPositionsExpanded = computed(() => positionGroups.value.every(group => 
 
 watch(positionGroups, (groups, previousGroups) => {
   if (expandedApplicationId !== app.value?.id) {
-    // 新打开详情时只展开当前岗位；同一详情内的刷新保留用户的展开选择。
+    // 新打开详情时优先展开主要岗位；同一详情内的刷新保留用户的展开选择。
     expandedApplicationId = app.value?.id
-    const initial = groups.find(group => group.isCurrent) ?? groups[0]
+    const initial = groups.find(group => group.isPrimary) ?? groups.find(group => group.isCurrent) ?? groups[0]
     expandedPositions.value = new Set(initial ? [initial.key] : [])
     return
   }
@@ -162,6 +166,7 @@ watch(positionGroups, (groups, previousGroups) => {
   const expanded = new Set([...expandedPositions.value].filter(key => keys.has(key)))
   // 换岗位或补录导致新分组出现时，展开该组以显示刚保存的内容。
   for (const group of groups) if (!previousKeys.has(group.key)) expanded.add(group.key)
+  for (const group of groups) if (group.isPrimary && !previousGroups?.some(old => old.key === group.key && old.isPrimary)) expanded.add(group.key)
   if (!expanded.size && !groups.some(group => group.isCurrent) && groups[0]) expanded.add(groups[0].key)
   expandedPositions.value = expanded
 }, { immediate: true })
@@ -226,12 +231,21 @@ async function confirmRemovePosition(group: PositionGroup) {
   deletingPositionKey.value = group.key
   try {
     const ok = await ElMessageBox.confirm(
-      `删除「${positionLabel(group.position)}」（第 ${group.positionVersion} 次流程）及其 ${group.rounds.length} 个轮次、${group.statusHistory.length} 条状态变化、${group.resultHistory.length} 条结果记录？${consequence}删除后无法撤销。`,
+      `删除「${positionLabel(group.position)}」（岗位记录 ${group.displayOrder}）及其 ${group.rounds.length} 个轮次、${group.statusHistory.length} 条状态变化、${group.resultHistory.length} 条结果记录？${consequence}删除后无法撤销。`,
       '删除岗位', { type: 'warning', confirmButtonText: '删除岗位', cancelButtonText: '取消', customClass: 'position-delete-confirm' },
     ).then(() => true).catch(() => false)
     if (ok) await store.removePosition(applicationId, payload)
   } catch { /* 请求层提示错误，保留原岗位供用户核对。 */ }
   finally { deletingPositionKey.value = null }
+}
+
+async function selectPrimaryPosition(group: PositionGroup) {
+  if (!app.value || selectingPrimaryKey.value || deletingPositionKey.value) return
+  const payload = { position: group.position, positionVersion: group.positionVersion, expectedPositionVersion: app.value.positionVersion }
+  selectingPrimaryKey.value = group.key
+  try { await store.setPrimaryPosition(app.value.id, payload) }
+  catch { /* 请求层提示，保持原主要岗位。 */ }
+  finally { selectingPrimaryKey.value = null }
 }
 </script>
 

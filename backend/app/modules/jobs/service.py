@@ -21,6 +21,7 @@ from app.modules.jobs.schemas import (
     EventUpdate,
     OfferDecisionPatch,
     PositionDeleteInput,
+    PrimaryPositionInput,
     RoundCreate,
     RoundUpdate,
     StatusHistoryPositionInput,
@@ -214,6 +215,24 @@ def delete_application(db: Session, app_id: int) -> None:
     db.commit()
 
 
+def set_primary_position(db: Session, app_id: int, data: PrimaryPositionInput) -> Application:
+    row = get_application(db, app_id)
+    if row.position_version != data.expected_position_version:
+        raise HTTPException(409, "岗位记录已变更，请刷新后重新选择主要岗位")
+    key = (data.position_version, recorded_position(data.position))
+    if key not in position_groups(row):
+        raise HTTPException(409, "所选岗位已变更或删除，请刷新后重试")
+    result = db.execute(update(Application).where(Application.id == app_id,
+        Application.position_version == data.expected_position_version).values(
+            primary_position=key[1], primary_position_version=key[0], updated_at=Application.updated_at))
+    if result.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "岗位记录已变更，请刷新后重试")
+    db.commit()
+    db.expire_all()
+    return get_application(db, app_id)
+
+
 def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Application:
     row = get_application(db, app_id)
     if row.position_version != data.expected_position_version:
@@ -240,6 +259,8 @@ def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Appl
             raise HTTPException(409, "存在其他公司的阶段关联，请先更正后删除")
     is_current = key == (row.position_version, recorded_position(row.position))
     values = {"position_version": row.position_version}
+    if row.primary_position_version == key[0] and recorded_position(row.primary_position) == key[1]:
+        values.update(primary_position=None, primary_position_version=None)
     if is_current:
         versions = [row.position_version, *(version for version, _ in groups)]
         values.update(position=None, position_version=max(versions) + 1, status="screening", offer_decision=None)

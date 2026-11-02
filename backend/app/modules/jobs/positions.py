@@ -1,7 +1,9 @@
 """按与详情页相同的岗位快照及明确关联，定位一个岗位分组的记录。"""
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from .models import Application, InterviewRound, RoundResultHistory, StatusHistory
+from .constants import ROUND_TYPE_STATUS
 
 
 def recorded_position(value: str | None) -> str | None:
@@ -78,3 +80,38 @@ def position_groups(row: Application) -> dict[tuple[int, str | None], PositionRe
     for result in row.round_result_history:
         ensure(result.position_version, resolver.result_position(result)).results.append(result)
     return groups
+
+
+def position_summaries(row: Application) -> list[dict]:
+    """岗位记录展示序号独立于内部代次，主要岗位只是汇总选择。"""
+    groups = position_groups(row)
+    current_key = (row.position_version, recorded_position(row.position)) if row.has_current_position else None
+    preferred = (row.primary_position_version, recorded_position(row.primary_position))
+    primary_key = preferred if row.primary_position_version is not None and preferred in groups else current_key
+
+    def order(entry):
+        (version, position), group = entry
+        times = [item.changed_at for item in group.stages] + [item.created_at for item in group.rounds] + [item.changed_at for item in group.results]
+        return version, min((value for value in times if value is not None), default=datetime.max), position or ''
+
+    summaries = []
+    for index, (key, group) in enumerate(sorted(groups.items(), key=order), 1):
+        is_current = key == current_key
+        latest_round = max(group.rounds, key=lambda item: item.id, default=None)
+        latest_stage = max(group.stages, key=lambda item: (item.changed_at, item.id), default=None)
+        latest_result = max(group.results, key=lambda item: (item.changed_at, item.id), default=None)
+        status = row.status if is_current else latest_stage.status if latest_stage else latest_result.status if latest_result else ROUND_TYPE_STATUS.get(latest_round.round_type) if latest_round else None
+        decision = row.offer_decision if is_current else None
+        if not is_current and status == 'offer':
+            recorded = [item for item in group.results if item.to_result in ('accepted', 'rejected_offer')]
+            if recorded:
+                decision = max(recorded, key=lambda item: (item.changed_at, item.id)).to_result
+        result = decision if status == 'offer' else latest_round.result if latest_round else None
+        summaries.append({
+            'position': key[1], 'positionVersion': key[0], 'displayOrder': index,
+            'isCurrent': is_current, 'isPrimary': key == primary_key,
+            'status': status, 'result': result, 'offerDecision': decision, 'latestRoundId': latest_round.id if latest_round else None,
+            'roundIds': [item.id for item in group.rounds], 'statusHistoryIds': [item.id for item in group.stages],
+            'resultHistoryIds': [item.id for item in group.results],
+        })
+    return summaries

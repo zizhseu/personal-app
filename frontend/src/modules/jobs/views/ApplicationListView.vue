@@ -39,8 +39,8 @@
           <span class="company">{{ row.company }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="position" label="岗位" min-width="150" sortable="custom">
-        <template #default="{ row }">{{ row.position ?? '—' }}</template>
+      <el-table-column prop="position" label="主要岗位" min-width="150" sortable="custom">
+        <template #default="{ row }">{{ hasCurrentPosition(row) ? positionLabel(row.position) : '—' }}</template>
       </el-table-column>
       <el-table-column label="链接" width="80" align="center">
         <template #default="{ row }">
@@ -111,7 +111,7 @@
         filter-placement="bottom-end"
       >
         <template #default="{ row }">
-          <el-dropdown v-if="hasCurrentPosition(row)" trigger="click" @command="(s: ApplicationStatus) => store.quickSetStatus(row.id, s)">
+          <el-dropdown v-if="hasCurrentPosition(row) && row.displayStatusRecorded && row.displayIsCurrent" trigger="click" @command="(s: ApplicationStatus) => store.quickSetStatus(row.id, s)">
             <span class="status-trigger" @click.stop>
               <StatusTag :status="row.status" />
               <el-icon class="caret"><CaretBottom /></el-icon>
@@ -129,7 +129,13 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <span v-else class="base-empty">暂无当前岗位</span>
+          <StatusTag v-else-if="hasCurrentPosition(row) && row.displayStatusRecorded" :status="row.status" title="历史岗位状态来自已保存的流程" />
+          <span v-else class="base-empty">{{ hasCurrentPosition(row) ? '状态未记录' : '暂无主要岗位' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="最新轮次" width="110">
+        <template #default="{ row }">
+          <span>{{ roundTypeLabel(row.latestRoundType) }}</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -145,6 +151,7 @@
           <!-- 可点击下拉：非 Offer 态改最新轮次结果；Offer 态改接受 / 拒绝 -->
           <el-dropdown
             v-if="resultDisplay(row)"
+            :disabled="row.status === 'offer' && !row.displayIsCurrent"
             trigger="click"
             @command="(r: RoundResult) => quickSetResult(row, r)"
           >
@@ -212,14 +219,19 @@ import { ElMessageBox, type TableInstance } from 'element-plus'
 import dayjs from 'dayjs'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
-import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
+import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS, ROUND_TYPE_LABELS } from '../constants'
 import { useJobsStore } from '../store'
-import { currentResult, currentRounds, latestRound, hasCurrentPosition } from '../selectors'
-import type { Application, ApplicationStatus, RoundResult } from '../types'
+import { currentResult, currentRounds, latestRound, hasCurrentPosition, positionLabel } from '../selectors'
+import { primaryApplication, type ListApplication } from '../primaryPosition'
+import type { Application, ApplicationStatus, RoundResult, RoundType } from '../types'
 import { useListViewState } from '@/shared/composables/useListViewState'
 import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
 
 const store = useJobsStore()
+
+function roundTypeLabel(type: RoundType | null | undefined): string {
+  return type ? ROUND_TYPE_LABELS[type] : '—'
+}
 
 const PAGE_SIZE = 10
 const view = useListViewState({
@@ -271,7 +283,7 @@ function addCity(row: ListRow) {
 
 /** 筛选 + 搜索（数据量小，全部前端现算） */
 const filtered = computed(() => {
-  let list = store.applications
+  let list = store.applications.map(primaryApplication)
   if (keyword.value) {
     const k = keyword.value.toLowerCase()
     // 岗位是选填字段（可空），必须可选链，否则空岗位的行会让整个过滤抛错、页面更新冻结
@@ -281,7 +293,7 @@ const filtered = computed(() => {
     )
   }
   if (statusFilter.value.length) {
-    list = list.filter((a) => hasCurrentPosition(a) && statusFilter.value.includes(a.status))
+    list = list.filter((a) => hasCurrentPosition(a) && a.displayStatusRecorded && statusFilter.value.includes(a.status))
   }
   if (resultFilter.value.length) {
     list = list.filter((a) => {
@@ -305,13 +317,15 @@ const rows = computed(() =>
     ...a,
     deadline: latestRoundTime(a),
     latestResult: latestRound(a)?.result ?? null,
+    latestRoundType: latestRound(a)?.roundType ?? null,
     base: a.base ?? [],
   })),
 )
 
-type ListRow = Application & {
+type ListRow = ListApplication & {
   deadline: string | null
   latestResult: RoundResult | null
+  latestRoundType: RoundType | null
   base: string[]
 }
 
@@ -354,7 +368,7 @@ watch([sortBy, sortOrder], async () => {
 
 /** EP 侧过滤与数据层过滤同条件，幂等 */
 function filterStatusMethod(value: ApplicationStatus, row: ListRow) {
-  return hasCurrentPosition(row) && row.status === value
+  return hasCurrentPosition(row) && row.displayStatusRecorded && row.status === value
 }
 
 function filterResultMethod(value: RoundResult, row: ListRow) {
@@ -381,6 +395,7 @@ function resultOptions(row: ListRow): RoundResult[] {
 
 async function quickSetResult(row: ListRow, r: RoundResult) {
   if (row.status === 'offer') {
+    if (!row.displayIsCurrent) return
     if (r !== 'accepted' && r !== 'rejected_offer') return
     await store.setOfferDecision(row.id, r)
   } else {
@@ -400,7 +415,9 @@ function openCreate() {
 }
 
 function openEdit(row: Application) {
-  editing.value = row
+  const original = store.applications.find(item => item.id === row.id)
+  if (!original) return
+  editing.value = original
   formVisible.value = true
 }
 
@@ -409,9 +426,8 @@ function goDetail(row: Application) {
 }
 
 async function confirmRemove(row: Application) {
-  const title = row.position ? `${row.company} - ${row.position}` : row.company
   const ok = await ElMessageBox.confirm(
-    `确定删除「${title}」吗？其下所有流程轮次也会一并删除。`,
+    `确定删除「${row.company}」的整条公司投递记录吗？该公司的所有岗位、流程轮次和历史会一并删除。`,
     '删除确认',
     { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
   ).catch(() => false)

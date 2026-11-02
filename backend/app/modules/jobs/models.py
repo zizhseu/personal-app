@@ -16,6 +16,8 @@ class Application(Base, TimestampMixin):
     company: Mapped[str] = mapped_column(String(100))
     position: Mapped[str | None] = mapped_column(String(100))  # 岗位（选填）
     position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    primary_position: Mapped[str | None] = mapped_column(String(100))
+    primary_position_version: Mapped[int | None] = mapped_column(Integer)
     url: Mapped[str | None] = mapped_column(String(500))          # 招聘页面链接（点击跳转）
     apply_date: Mapped[date | None] = mapped_column(Date)         # 投递日期
     salary: Mapped[str | None] = mapped_column(String(50))        # 薪资范围（自由文本）
@@ -44,6 +46,8 @@ class Application(Base, TimestampMixin):
             for items in (self.rounds, self.status_history, self.round_result_history) for item in items)
 
     def to_dict(self) -> dict:
+        from .positions import position_summaries
+        summaries = position_summaries(self)
         # 有时间的按时间升序在前，空时间排最后
         ordered_rounds = sorted(
             self.rounds,
@@ -63,6 +67,8 @@ class Application(Base, TimestampMixin):
             "position": self.position,
             "positionVersion": self.position_version,
             "hasCurrentPosition": self.has_current_position,
+            "positionSummaries": summaries,
+            "primaryPosition": next((item for item in summaries if item['isPrimary']), None),
             "url": self.url,
             "applyDate": self.apply_date.isoformat() if self.apply_date else None,
             "salary": self.salary,

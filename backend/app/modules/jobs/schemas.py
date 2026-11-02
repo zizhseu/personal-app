@@ -64,6 +64,13 @@ class PositionDeleteInput(PositionInput):
     expected_result_history_ids: list[PositiveInt] | None = Field(default=None, max_length=10000)
 
 
+class PrimaryPositionInput(PositionInput):
+    model_config = ConfigDict(extra="forbid")
+    position: str | None = Field(max_length=100)
+    position_version: int = Field(ge=1)
+    expected_position_version: int = Field(ge=1)
+
+
 class ApplicationStatusPatch(CamelModel):
     status: Literal[APPLICATION_STATUSES]
 

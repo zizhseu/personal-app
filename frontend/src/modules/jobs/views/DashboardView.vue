@@ -75,12 +75,13 @@ import StatCard from '../components/StatCard.vue'
 import { STATUS_COLORS, STATUS_LABELS, STATUS_ORDER, RESULT_COLORS, RESULT_LABELS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
 import { resultBucket, hasCurrentPosition, type ResultBucket } from '../selectors'
+import { primaryApplication } from '../primaryPosition'
 import type { ApplicationStatus } from '../types'
 
 use([CanvasRenderer, PieChart, BarChart, TooltipComponent, LegendComponent, GridComponent])
 
 const store = useJobsStore()
-const activeApplications = computed(() => store.applications.filter(hasCurrentPosition))
+const activeApplications = computed(() => store.applications.map(primaryApplication).filter(hasCurrentPosition))
 
 onMounted(() => store.ensureLoaded())
 
@@ -125,7 +126,7 @@ const statCards = computed(() => {
 const statusOption = computed(() => {
   const counts = STATUS_ORDER.map((s) => ({
     name: STATUS_LABELS[s],
-    value: activeApplications.value.filter((a) => a.status === s).length,
+    value: activeApplications.value.filter((a) => a.displayStatusRecorded && a.status === s).length,
     itemStyle: { color: STATUS_COLORS[s as ApplicationStatus] },
   })).filter((d) => d.value > 0)
   if (counts.length === 0) return null
