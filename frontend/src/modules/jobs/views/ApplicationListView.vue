@@ -40,7 +40,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="position" label="主要岗位" min-width="150" sortable="custom">
-        <template #default="{ row }">{{ hasCurrentPosition(row) ? positionLabel(row.position) : '—' }}</template>
+        <template #default="{ row }">
+          <PrimaryPositionSelect :application-id="row.id" />
+        </template>
       </el-table-column>
       <el-table-column label="链接" width="80" align="center">
         <template #default="{ row }">
@@ -133,11 +135,6 @@
           <span v-else class="base-empty">{{ hasCurrentPosition(row) ? '状态未记录' : '暂无主要岗位' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="最新轮次" width="110">
-        <template #default="{ row }">
-          <span>{{ roundTypeLabel(row.latestRoundType) }}</span>
-        </template>
-      </el-table-column>
       <el-table-column
         label="结果"
         width="110"
@@ -219,19 +216,16 @@ import { ElMessageBox, type TableInstance } from 'element-plus'
 import dayjs from 'dayjs'
 import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
-import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS, ROUND_TYPE_LABELS } from '../constants'
+import PrimaryPositionSelect from '../components/PrimaryPositionSelect.vue'
+import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
-import { currentResult, currentRounds, latestRound, hasCurrentPosition, positionLabel } from '../selectors'
+import { currentResult, currentRounds, latestRound, hasCurrentPosition } from '../selectors'
 import { primaryApplication, type ListApplication } from '../primaryPosition'
-import type { Application, ApplicationStatus, RoundResult, RoundType } from '../types'
+import type { Application, ApplicationStatus, RoundResult } from '../types'
 import { useListViewState } from '@/shared/composables/useListViewState'
 import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
 
 const store = useJobsStore()
-
-function roundTypeLabel(type: RoundType | null | undefined): string {
-  return type ? ROUND_TYPE_LABELS[type] : '—'
-}
 
 const PAGE_SIZE = 10
 const view = useListViewState({
@@ -317,7 +311,6 @@ const rows = computed(() =>
     ...a,
     deadline: latestRoundTime(a),
     latestResult: latestRound(a)?.result ?? null,
-    latestRoundType: latestRound(a)?.roundType ?? null,
     base: a.base ?? [],
   })),
 )
@@ -325,7 +318,6 @@ const rows = computed(() =>
 type ListRow = ListApplication & {
   deadline: string | null
   latestResult: RoundResult | null
-  latestRoundType: RoundType | null
   base: string[]
 }
 

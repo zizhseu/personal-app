@@ -58,6 +58,9 @@
         <el-descriptions-item label="Base">
           {{ app.base?.length ? app.base.join(' / ') : '—' }}
         </el-descriptions-item>
+        <el-descriptions-item label="主要岗位">
+          <PrimaryPositionSelect :application-id="app.id" :disabled="deletingPositionKey !== null" />
+        </el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">
           {{ app.note || '—' }}
         </el-descriptions-item>
@@ -85,7 +88,7 @@
           :expanded="expandedPositions.has(group.key)"
           :deleting="deletingPositionKey === group.key"
           :selecting="selectingPrimaryKey === group.key"
-          :selection-disabled="selectingPrimaryKey !== null || deletingPositionKey !== null"
+          :selection-disabled="store.savingPrimaryIds.includes(app.id) || deletingPositionKey !== null"
           @toggle="togglePosition(group.key)"
           @add-round="openAddRound(group)"
           @remove-position="confirmRemovePosition(group)"
@@ -122,6 +125,7 @@ import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import RoundFormDialog from '../components/RoundFormDialog.vue'
 import PositionChangeDialog from '../components/PositionChangeDialog.vue'
 import PositionHistoryGroup from '../components/PositionHistoryGroup.vue'
+import PrimaryPositionSelect from '../components/PrimaryPositionSelect.vue'
 import { groupPositionHistory } from '../history'
 import type { PositionHistoryGroup as PositionGroup } from '../history'
 import { hasCurrentPosition, positionLabel } from '../selectors'
@@ -240,7 +244,7 @@ async function confirmRemovePosition(group: PositionGroup) {
 }
 
 async function selectPrimaryPosition(group: PositionGroup) {
-  if (!app.value || selectingPrimaryKey.value || deletingPositionKey.value) return
+  if (!app.value || store.savingPrimaryIds.includes(app.value.id) || deletingPositionKey.value) return
   const payload = { position: group.position, positionVersion: group.positionVersion, expectedPositionVersion: app.value.positionVersion }
   selectingPrimaryKey.value = group.key
   try { await store.setPrimaryPosition(app.value.id, payload) }

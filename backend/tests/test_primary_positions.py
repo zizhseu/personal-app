@@ -65,8 +65,23 @@ class PrimaryPositionTests(unittest.TestCase):
         self.assertEqual([item['displayOrder'] for item in summaries],[1,2,3])
         self.assertEqual(sum(item['positionVersion']==2 for item in summaries),2)
         primary=row.to_dict()['primaryPosition']
-        self.assertEqual((primary['position'],primary['status']),('研究岗位','rescreen'))
+        self.assertEqual((primary['position'],primary['status']),('研发岗位','rescreen'))
         self.assertEqual(len(primary['roundIds']),1)
+        self.assertFalse(primary['isCurrent'])
+
+    def test_default_primary_stays_with_first_position_when_new_position_is_added(self):
+        row=self.example()
+        row=service.update_application(self.db,row.id,ApplicationUpdate(position='第三个新岗位',restart_process=True))
+        self.assertEqual(row.to_dict()['primaryPosition']['position'],'研发岗位')
+        self.assertIsNone(row.primary_position_version)
+
+    def test_primary_can_switch_between_all_positions_and_back_to_the_first(self):
+        row=self.example()
+        before=self.original_data()
+        for position,version in [('Coding 岗位',2),('研究岗位',2),('研发岗位',1),('Coding 岗位',2),('研发岗位',1)]:
+            row=self.choose(self.fresh(row.id),position,version)
+            self.assertEqual((row.to_dict()['primaryPosition']['position'],row.to_dict()['primaryPosition']['positionVersion']),(position,version))
+            self.assertEqual(self.original_data(),before)
 
     def test_selecting_same_version_historical_position_only_updates_preference(self):
         row=self.example()
@@ -100,11 +115,11 @@ class PrimaryPositionTests(unittest.TestCase):
         self.assertEqual(row.to_dict()['primaryPosition']['status'],'interviewing')
         self.assertEqual(len(row.status_history),before)
 
-    def test_deleting_selected_history_falls_back_to_current(self):
+    def test_deleting_selected_history_falls_back_to_first_remaining_position(self):
         row=self.choose(self.example(),'Coding 岗位',2)
         row=self.remove(row,'Coding 岗位',2)
         self.assertIsNone(row.primary_position_version)
-        self.assertEqual(row.to_dict()['primaryPosition']['position'],'研究岗位')
+        self.assertEqual(row.to_dict()['primaryPosition']['position'],'研发岗位')
 
     def test_deleting_current_keeps_other_selected_primary_without_reactivating_current(self):
         row=self.choose(self.example(),'研发岗位',1)
@@ -112,6 +127,9 @@ class PrimaryPositionTests(unittest.TestCase):
         self.assertFalse(row.has_current_position)
         self.assertEqual(row.to_dict()['primaryPosition']['position'],'研发岗位')
         row=self.remove(row,'研发岗位',1)
+        self.assertEqual(row.to_dict()['primaryPosition']['position'],'Coding 岗位')
+        self.assertFalse(row.has_current_position)
+        row=self.remove(row,'Coding 岗位',2)
         self.assertIsNone(row.to_dict()['primaryPosition'])
 
     def test_stale_and_missing_target_requests_do_not_write(self):

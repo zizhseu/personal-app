@@ -49,3 +49,18 @@ test('主要岗位没有已记录的状态时不会把当前岗位状态当作�
   const source=app();source.primaryPosition={...summary(),status:null}
   assert.equal(primaryApplication(source).displayStatusRecorded,false)
 })
+
+test('服务端默认的最早岗位与用户后续选择均优先于当前岗位，原始版本保持不变',()=>{
+  const source=app()
+  const first={...summary(),position:'研发岗位',positionVersion:1,displayOrder:1,status:'rescreen',result:'failed',latestRoundId:1,roundIds:[1]}
+  source.primaryPosition=first
+  const original=structuredClone(source)
+  assert.equal(groupPositionHistory(source)[0].position,'研发岗位')
+  assert.equal(primaryApplication(source).position,'研发岗位')
+  assert.equal(primaryApplication(source).positionVersion,1)
+  assert.equal(source.positionVersion,2)
+  assert.deepEqual(source,original)
+  source.primaryPosition=summary()
+  assert.equal(groupPositionHistory(source)[0].position,'Coding 岗位')
+  assert.equal(primaryApplication(source).position,'Coding 岗位')
+})

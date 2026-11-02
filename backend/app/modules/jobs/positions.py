@@ -87,15 +87,18 @@ def position_summaries(row: Application) -> list[dict]:
     groups = position_groups(row)
     current_key = (row.position_version, recorded_position(row.position)) if row.has_current_position else None
     preferred = (row.primary_position_version, recorded_position(row.primary_position))
-    primary_key = preferred if row.primary_position_version is not None and preferred in groups else current_key
 
     def order(entry):
         (version, position), group = entry
         times = [item.changed_at for item in group.stages] + [item.created_at for item in group.rounds] + [item.changed_at for item in group.results]
         return version, min((value for value in times if value is not None), default=datetime.max), position or ''
 
+    ordered_groups = sorted(groups.items(), key=order)
+    first_key = ordered_groups[0][0] if ordered_groups else None
+    # 未选择时用最早的岗位；用户选择始终优先，不随当前岗位变化。
+    primary_key = preferred if row.primary_position_version is not None and preferred in groups else first_key
     summaries = []
-    for index, (key, group) in enumerate(sorted(groups.items(), key=order), 1):
+    for index, (key, group) in enumerate(ordered_groups, 1):
         is_current = key == current_key
         latest_round = max(group.rounds, key=lambda item: item.id, default=None)
         latest_stage = max(group.stages, key=lambda item: (item.changed_at, item.id), default=None)

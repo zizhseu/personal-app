@@ -21,6 +21,7 @@ export const useJobsStore = defineStore('jobs', {
     events: [] as ScheduleEvent[],
     loaded: false,
     loading: false,
+    savingPrimaryIds: [] as number[],
   }),
   actions: {
     async loadAll() {
@@ -73,9 +74,15 @@ export const useJobsStore = defineStore('jobs', {
       await this.loadAll()
     },
     async setPrimaryPosition(id: number, payload: PrimaryPositionPayload) {
-      await api.setPrimaryPosition(id, payload)
-      ElMessage.success('主要岗位已更新，列表将展示该岗位')
-      await this.loadAll()
+      if (this.savingPrimaryIds.includes(id)) return
+      this.savingPrimaryIds.push(id)
+      try {
+        await api.setPrimaryPosition(id, payload)
+        await this.loadAll()
+        ElMessage.success('主要岗位已更新，列表将展示该岗位')
+      } finally {
+        this.savingPrimaryIds = this.savingPrimaryIds.filter(value => value !== id)
+      }
     },
     async addRound(applicationId: number, payload: RoundCreatePayload) {
       await api.createRound(applicationId, payload)
