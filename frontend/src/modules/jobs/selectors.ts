@@ -1,13 +1,13 @@
 import type { Application, InterviewRound, RoundResult } from './types'
+import { positionResolution, recordedPosition } from './positionResolution.ts'
 
 export const positionLabel = (position?: string | null) => position?.trim() || '岗位未记录'
 export const hasCurrentPosition = (application: Application) => application.hasCurrentPosition !== false
 
 export function isCurrentRound(round: InterviewRound, application: Application): boolean {
   const version = round.positionVersion ?? 1
-  const stage = application.statusHistory?.find(row => row.id === round.statusHistoryId && (row.positionVersion ?? 1) === version)
   return version === (application.positionVersion ?? 1)
-    && (round.position ?? stage?.position ?? null) === application.position
+    && positionResolution(application).roundPosition(round) === recordedPosition(application.position)
 }
 
 export function currentRounds(application: Application): InterviewRound[] {

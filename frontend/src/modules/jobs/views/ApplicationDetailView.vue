@@ -219,7 +219,9 @@ async function confirmRemoveRound(round: InterviewRound) {
 async function confirmRemovePosition(group: PositionGroup) {
   if (!app.value || deletingPositionKey.value) return
   const applicationId = app.value.id
-  const payload = { position: group.position, positionVersion: group.positionVersion, expectedPositionVersion: app.value.positionVersion }
+  const payload = { position: group.position, positionVersion: group.positionVersion, expectedPositionVersion: app.value.positionVersion,
+    expectedRoundIds: group.rounds.map(item => item.id), expectedStatusHistoryIds: group.statusHistory.map(item => item.id),
+    expectedResultHistoryIds: group.resultHistory.map(item => item.id) }
   const consequence = group.isCurrent ? '当前岗位将留空，公司和其他岗位的历史保留。' : '公司和其他岗位的记录保留。'
   deletingPositionKey.value = group.key
   try {

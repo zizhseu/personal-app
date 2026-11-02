@@ -25,7 +25,7 @@ from app.modules.jobs.schemas import (
     RoundUpdate,
     StatusHistoryPositionInput,
 )
-from app.modules.jobs.positions import position_groups, recorded_position
+from app.modules.jobs.positions import PositionResolver, position_groups, recorded_position
 
 
 def list_applications(
@@ -74,7 +74,7 @@ def _new_stage(db: Session, row: Application, status: str, when: datetime) -> St
 
 def _current_stage(db: Session, row: Application, when: datetime) -> StatusHistory:
     latest = max(row.status_history, key=lambda h: (h.changed_at, h.id), default=None)
-    if latest and latest.status == row.status and latest.position_version == row.position_version and latest.position == row.position:
+    if latest and latest.status == row.status and latest.position_version == row.position_version and PositionResolver(row).stage_position(latest) == recorded_position(row.position):
         return latest
     return _new_stage(db, row, row.status, when)
 
@@ -82,13 +82,7 @@ def _current_stage(db: Session, row: Application, when: datetime) -> StatusHisto
 def _current_round(round_row: InterviewRound, app_row: Application) -> bool:
     if round_row.position_version != app_row.position_version:
         return False
-    position = round_row.position
-    if position is None and round_row.status_history_id:
-        stage = next((h for h in app_row.status_history if h.id == round_row.status_history_id
-                      and h.position_version == round_row.position_version), None)
-        position = stage.position if stage else None
-    # 未知岗位单独归档，不能仅因代次相同就当作当前岗位。
-    return position == app_row.position
+    return PositionResolver(app_row).round_position(round_row) == recorded_position(app_row.position)
 
 
 def _round_stage(db: Session, round_row: InterviewRound, app_row: Application, when: datetime) -> StatusHistory | None:
@@ -96,9 +90,10 @@ def _round_stage(db: Session, round_row: InterviewRound, app_row: Application, w
         return _current_stage(db, app_row, when)
     if round_row.status_history_id:
         return db.get(StatusHistory, round_row.status_history_id)
+    resolver = PositionResolver(app_row)
     candidates = [h for h in app_row.status_history if h.position_version == round_row.position_version
                   and h.status == ROUND_TYPE_STATUS.get(round_row.round_type) and h.changed_at <= when
-                  and h.position == round_row.position]
+                  and resolver.stage_position(h) == resolver.round_position(round_row)]
     return max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
 
 
@@ -231,6 +226,10 @@ def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Appl
     round_ids = {item.id for item in target.rounds}
     result_ids = {item.id for item in target.results}
     stage_ids = {item.id for item in target.stages}
+    for expected, actual in ((data.expected_round_ids, round_ids), (data.expected_status_history_ids, stage_ids),
+                             (data.expected_result_history_ids, result_ids)):
+        if expected is None or len(expected) != len(set(expected)) or set(expected) != actual:
+            raise HTTPException(409, "岗位记录范围已更新，请刷新页面后重新确认删除；本次未删除任何记录")
     if round_ids and db.scalar(select(RoundResultHistory.id).where(
             RoundResultHistory.round_id.in_(round_ids), RoundResultHistory.id.not_in(result_ids)).limit(1)) is not None:
         raise HTTPException(409, "存在其他岗位的结果关联，请先更正相关岗位后删除")
@@ -294,12 +293,12 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
         _check_round_type_status(data.round_type, app_row.status)
         stage = _current_stage(db, app_row, when)
     else:
-        snapshots = [*app_row.status_history, *app_row.rounds, *app_row.round_result_history]
-        if not any(h.position_version == version and h.position == position for h in snapshots):
+        if (version, recorded_position(position)) not in position_groups(app_row):
             raise HTTPException(409, "该岗位流程已变更或删除，请刷新后重试")
         # 历史补录不受当前岗位状态限制，只关联该岗位内与轮次类型匹配的阶段。
+        resolver = PositionResolver(app_row)
         candidates = [h for h in app_row.status_history if h.position_version == version
-                      and h.position == position and h.status == ROUND_TYPE_STATUS.get(data.round_type)]
+                      and resolver.stage_position(h) == recorded_position(position) and h.status == ROUND_TYPE_STATUS.get(data.round_type)]
         stage = max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
     payload = data.model_dump(exclude={"position", "position_version", "expected_position_version"})
     start_at = payload.pop("start_at")

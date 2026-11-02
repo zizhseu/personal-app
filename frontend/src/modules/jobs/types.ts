@@ -145,6 +145,9 @@ export interface PositionDeletePayload {
   position: string | null
   positionVersion: number
   expectedPositionVersion: number
+  expectedRoundIds: number[]
+  expectedStatusHistoryIds: number[]
+  expectedResultHistoryIds: number[]
 }
 
 /** 自定义日程类型 */

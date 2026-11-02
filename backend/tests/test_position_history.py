@@ -85,6 +85,7 @@ class PositionHistoryTests(unittest.TestCase):
         row.position = '岗位 B'
         row.rounds[0].position = None
         row.status_history[0].position = None
+        row.status_history.append(StatusHistory(status='screening', position='岗位 A', position_version=1))
         self.db.commit()
         value = service.create_round(self.db, row.id, RoundCreate(round_type='first', position=None, position_version=1, result='completed'))
         self.assertIsNone(value.position)

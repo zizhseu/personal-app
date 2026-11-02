@@ -88,14 +88,38 @@ test('旧记录在同一代次补录为不同岗位后分别展示，当前岗�
   assert.deepEqual(rows[1].resultHistory.map(item => item.id), [1])
 })
 
-test('缺少岗位快照的旧记录单独展示，不猜测为当前岗位', () => {
-  const rows = groupPositionHistory(application({
+test('旧版同一流程的空快照归入唯一岗位，不拆成第二组，也不改写原记录', () => {
+  const input = application({
     positionVersion: 1,
     rounds: [round(1, null, 1)], statusHistory: [stage(1, null, 1)], resultHistory: [result(1, null, 1)],
-  }))
-  assert.deepEqual(rows.map(row => [row.position, row.isCurrent]), [['岗位 B', true], [null, false]])
-  assert.deepEqual(rows[1].rounds.map(item => item.id), [1])
-  assert.deepEqual(rows[1].resultGroups.get(1).map(item => item.id), [1])
+  })
+  const original = structuredClone(input)
+  const rows = groupPositionHistory(input)
+  assert.deepEqual(rows.map(row => [row.position, row.isCurrent]), [['岗位 B', true]])
+  assert.deepEqual(rows[0].rounds.map(item => item.id), [1])
+  assert.deepEqual(rows[0].resultGroups.get(1).map(item => item.id), [1])
+  assert.equal(currentResult(input), 'failed')
+  assert.deepEqual(input, original)
+})
+
+test('真实旧库形状：一个当前岗位、一条空快照轮次、两个空快照阶段，只显示一个岗位', () => {
+  const input = application({position:'数据岗位',positionVersion:1,status:'interviewing',
+    rounds:[{...round(7,null,1,18),result:'not_attended'}],
+    statusHistory:[stage(9,null,1),stage(18,null,1,'interviewing')]})
+  const groups = groupPositionHistory(input)
+  assert.equal(groups.length,1)
+  assert.equal(groups[0].position,'数据岗位')
+  assert.equal(groups[0].rounds.length,1)
+  assert.equal(groups[0].statusHistory.length,2)
+  assert.equal(currentResult(input),'not_attended')
+})
+
+test('不把另一代次的未知岗位混进当前流程，同代次有多个名称时也不猜测空记录', () => {
+  const old = application({rounds:[round(1,null,1)],statusHistory:[stage(1,null,1)]})
+  assert.deepEqual(groupPositionHistory(old).map(row=>[row.position,row.positionVersion]),[['岗位 B',2],[null,1]])
+  const conflict = application({positionVersion:1,rounds:[round(1,null,1)],statusHistory:[stage(1,null,1),stage(2,'岗位 A',1)]})
+  assert.deepEqual(new Set(groupPositionHistory(conflict).map(row=>row.position)),new Set(['岗位 B','岗位 A',null]))
+  assert.equal(currentResult(conflict),null)
 })
 
 test('只有结果、没有轮次或阶段的岗位仍有独立分组，结果不丢失', () => {

@@ -32,7 +32,6 @@
                 <div class="round-head">
                   <span class="round-name">{{ ROUND_TYPE_LABELS[round.roundType] }}</span>
                   <el-tag size="small" effect="dark" disable-transitions class="result-tag" :color="RESULT_COLORS[round.result]">{{ RESULT_LABELS[round.result] }}</el-tag>
-                  <span v-if="!round.position && group.position" class="snapshot-hint">岗位待补录</span>
                   <span class="round-actions">
                     <el-button link type="primary" size="small" @click="emit('editRound', round)">编辑</el-button>
                     <el-button link type="danger" size="small" @click="emit('removeRound', round)">删除</el-button>

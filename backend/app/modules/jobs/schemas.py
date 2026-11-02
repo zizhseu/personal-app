@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, PositiveInt, field_validator, model_validator
 
 from app.modules.jobs.constants import APPLICATION_STATUSES, EVENT_TYPES, ROUND_RESULTS, ROUND_TYPES
 from app.shared.schemas import CamelModel
@@ -59,6 +59,9 @@ class PositionDeleteInput(PositionInput):
     position: str | None = Field(max_length=100)
     position_version: int = Field(ge=1)
     expected_position_version: int = Field(ge=1)
+    expected_round_ids: list[PositiveInt] | None = Field(default=None, max_length=10000)
+    expected_status_history_ids: list[PositiveInt] | None = Field(default=None, max_length=10000)
+    expected_result_history_ids: list[PositiveInt] | None = Field(default=None, max_length=10000)
 
 
 class ApplicationStatusPatch(CamelModel):

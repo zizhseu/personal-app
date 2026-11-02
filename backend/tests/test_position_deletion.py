@@ -42,8 +42,10 @@ class PositionDeletionTests(unittest.TestCase):
         return self.fresh(row.id)
 
     def remove(self, row, position, version):
+        target = position_groups(row)[(version, position)]
         return service.delete_position(self.db, row.id, PositionDeleteInput(position=position, position_version=version,
-            expected_position_version=row.position_version))
+            expected_position_version=row.position_version, expected_round_ids=[item.id for item in target.rounds],
+            expected_status_history_ids=[item.id for item in target.stages], expected_result_history_ids=[item.id for item in target.results]))
 
     def test_delete_old_period_preserves_current_and_same_name_reapplication(self):
         row = self.periods()
@@ -121,6 +123,8 @@ class PositionDeletionTests(unittest.TestCase):
     def test_unknown_group_in_same_version_does_not_delete_known_current_position(self):
         row = service.create_application(self.db, ApplicationCreate(company='旧记录', position=None))
         row.position = '岗位 B'
+        # 同代次确有两个不同的已知岗位时，空快照仍需单独核对，不能猜测归属。
+        row.status_history.append(StatusHistory(status='screening', position='岗位 A', position_version=1))
         self.db.commit()
         current = service.create_round(self.db, row.id, RoundCreate(round_type='screening'))
         row = self.remove(self.fresh(row.id), None, 1)
@@ -179,9 +183,13 @@ class PositionDeletionTests(unittest.TestCase):
             for payload in [{'positionVersion':1}, {'position':'岗位 A','positionVersion':0,'expectedPositionVersion':3},
                             {'position':'岗位 A','positionVersion':1,'expectedPositionVersion':3,'applicationId':999}]:
                 self.assertEqual(client.request('DELETE', path, json=payload).status_code, 422)
-            response = client.request('DELETE', path, json={'position':'岗位 A','positionVersion':1,'expectedPositionVersion':3})
+            old = position_groups(row)[(1, '岗位 A')]
+            response = client.request('DELETE', path, json={'position':'岗位 A','positionVersion':1,'expectedPositionVersion':3,
+                'expectedRoundIds':[item.id for item in old.rounds], 'expectedStatusHistoryIds':[item.id for item in old.stages], 'expectedResultHistoryIds':[item.id for item in old.results]})
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.json()['hasCurrentPosition'])
-            response = client.request('DELETE', path, json={'position':'岗位 A','positionVersion':3,'expectedPositionVersion':3})
+            current = position_groups(self.fresh(row.id))[(3, '岗位 A')]
+            response = client.request('DELETE', path, json={'position':'岗位 A','positionVersion':3,'expectedPositionVersion':3,
+                'expectedRoundIds':[item.id for item in current.rounds], 'expectedStatusHistoryIds':[item.id for item in current.stages], 'expectedResultHistoryIds':[item.id for item in current.results]})
             self.assertFalse(response.json()['hasCurrentPosition'])
             self.assertEqual(client.get(f'/api/jobs/applications/{row.id}').status_code, 200)
