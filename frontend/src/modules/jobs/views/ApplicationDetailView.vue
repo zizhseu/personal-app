@@ -81,7 +81,7 @@
           :group="group"
           :expanded="expandedPositions.has(group.key)"
           @toggle="togglePosition(group.key)"
-          @add-round="openAddRound"
+          @add-round="openAddRound(group)"
           @edit-round="openEditRound"
           @remove-round="confirmRemoveRound"
           @edit-stage="editStagePosition"
@@ -93,7 +93,7 @@
 
     <ApplicationFormDialog v-model="editVisible" :application="app" />
     <PositionChangeDialog v-model="positionVisible" :application="app" />
-    <RoundFormDialog v-model="roundVisible" :application-id="app.id" :round="editingRound" />
+    <RoundFormDialog v-model="roundVisible" :application-id="app.id" :round="editingRound" :target="roundTarget" />
   </div>
 
   <div v-else class="page">
@@ -114,7 +114,7 @@ import PositionHistoryGroup from '../components/PositionHistoryGroup.vue'
 import { groupPositionHistory } from '../history'
 import { STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { useJobsStore } from '../store'
-import type { ApplicationStatus, InterviewRound, RoundResultChange, StatusHistory } from '../types'
+import type { ApplicationStatus, InterviewRound, RoundResultChange, RoundTarget, StatusHistory } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -129,6 +129,7 @@ const editVisible = ref(false)
 const positionVisible = ref(false)
 const roundVisible = ref(false)
 const editingRound = ref<InterviewRound | null>(null)
+const roundTarget = ref<RoundTarget | null>(null)
 onMounted(() => store.ensureLoaded())
 const app = computed(() => store.applications.find(row => row.id === Number(route.params.id)))
 const positionGroups = computed(() => app.value ? groupPositionHistory(app.value) : [])
@@ -166,12 +167,14 @@ async function quickSetStatus(status: ApplicationStatus) {
   if (app.value) await store.quickSetStatus(app.value.id, status)
 }
 
-function openAddRound() {
+function openAddRound(target: RoundTarget) {
   editingRound.value = null
+  roundTarget.value = { position: target.position, positionVersion: target.positionVersion, isCurrent: target.isCurrent, status: target.status }
   roundVisible.value = true
 }
 
 function openEditRound(round: InterviewRound) {
+  roundTarget.value = null
   editingRound.value = round
   roundVisible.value = true
 }

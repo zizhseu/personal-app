@@ -21,7 +21,7 @@
         <section class="rounds-panel" :aria-labelledby="`${bodyId}-rounds`">
           <div class="panel-heading">
             <h4 :id="`${bodyId}-rounds`">流程轮次 <span>（{{ group.rounds.length }}）</span></h4>
-            <el-button v-if="group.isCurrent" type="primary" plain size="small" icon="Plus" @click="emit('addRound')">添加轮次</el-button>
+            <el-button type="primary" plain size="small" icon="Plus" @click="emit('addRound')">添加轮次</el-button>
           </div>
           <el-timeline v-if="group.rounds.length" class="timeline">
             <el-timeline-item v-for="round in group.rounds" :key="round.id" :timestamp="roundTimeText(round)" :type="timelineType(round.result)" :hollow="round.result === 'not_started'" placement="top">

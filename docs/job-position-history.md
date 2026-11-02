@@ -18,8 +18,11 @@
 2. 默认勾选「重新从初筛开始」，保存后新增该岗位的初筛阶段及轮次，旧轮次、结果与复盘继续保留。相同名称再次投递，也可以开始新的独立流程。
 3. 若新岗位继续当前阶段，取消该选项；例如仍处于面试阶段时，只新增新岗位的阶段记录，不借用旧岗位的面试结果。
 4. 普通「编辑投递」更改岗位也会保留历史，表单可选择新岗位是否重新从初筛开始。仅修改备注或保存相同岗位，不会新增岗位流程。
+5. 每个岗位下都可点击「添加轮次」，弹窗显示所选岗位。当前岗位沿用阶段与类型匹配规则；历史岗位可选择实际轮次类型补录，保存到所选岗位的流程，不改变当前岗位或状态。历史岗位没有匹配阶段时，轮次照常保留，已填写结果显示在该岗位下的「未归属阶段的结果记录」。
 
 投递列表及看板的当前结果、投递列表的截止时间只使用当前岗位流程。日程仍保留旧轮次，但展示轮次当时的岗位。切换岗位会清除上一岗位的 Offer 接受 / 拒绝决定；当前求职记录的其他基本资料保持既有编辑方式。
+
+岗位未知的旧轮次单独归档，不仅凭相同代次计入已知的当前岗位。若轮次名称缺失但明确关联到同流程、同岗位的阶段，可沿该关联归属；否则需先确认并补录岗位，避免历史补录影响当前结果。
 
 ## 补录旧数据
 
@@ -54,5 +57,7 @@
 旧记录的代次初始为 1、岗位快照为空。一次性标记 `position_history_20261026` 只补有时间与状态依据的阶段关联，不猜测旧岗位名称；重复启动不覆盖人工补录。
 
 `PUT /api/jobs/applications/{id}` 新增可选的 `restartProcess` 和 `expectedPositionVersion`。`PATCH /api/jobs/status-history/{id}/position` 保存 `{position}`，轮次更新支持可选 `{position}`；岗位长度上限为 100 字。阶段删除后关联置空，岗位快照保留；删除整条投递时仍按原级联关系清理其历史。
+
+`POST /api/jobs/applications/{id}/rounds` 可同时传入 `positionVersion` 和 `position`（未知岗位传 `null`），明确目标岗位流程；不指定时兼容原有当前岗位新增。服务端核对目标是否属于本条投递，历史阶段按所选岗位、流程和轮次类型匹配。可选 `expectedPositionVersion` 用于拒绝已变更岗位的陈旧表单；目标已被补录更名或删除时返回 409，客户端须刷新后重新选择。新增上下文字段不用于轮次编辑接口，也不新增数据库字段。
 
 源码见 [业务逻辑](../backend/app/modules/jobs/service.py)、[数据库迁移](../backend/app/core/database.py)、[详情页](../frontend/src/modules/jobs/views/ApplicationDetailView.vue)、[岗位分组](../frontend/src/modules/jobs/components/PositionHistoryGroup.vue)、[历史归属](../frontend/src/modules/jobs/history.ts)。数据功能验证见 [2026-10-26 验证记录](validation-position-history-2026-10-26.md)，列表分组验证见 [2026-11-02 验证记录](validation-position-groups-2026-11-02.md)。

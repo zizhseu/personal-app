@@ -44,6 +44,94 @@ class PositionHistoryTests(unittest.TestCase):
         self.assertEqual(value['rounds'][0]['position'], '岗位 A')
         self.assertEqual(value['rounds'][0]['statusHistoryId'], value['statusHistory'][0]['id'])
 
+    def test_add_round_to_old_position_keeps_current_application_unchanged(self):
+        row = self.create('interviewing')
+        old_stage = row.status_history[0].id
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 B', restart_process=True))
+        value = service.create_round(self.db, row.id, RoundCreate(round_type='first', position='岗位 A', position_version=1,
+            expected_position_version=2, result='failed', review_note='补录旧岗位一面'))
+        row = self.fresh(row.id)
+        self.assertEqual((row.position, row.status, row.position_version), ('岗位 B', 'screening', 2))
+        self.assertEqual((value.position, value.position_version, value.status_history_id), ('岗位 A', 1, old_stage))
+        self.assertEqual([r.result for r in row.rounds if r.position_version == 2], ['not_started'])
+        result = max(row.round_result_history, key=lambda h: h.id)
+        self.assertEqual((result.position, result.position_version, result.status_history_id), ('岗位 A', 1, old_stage))
+
+    def test_historical_round_without_matching_stage_stays_in_its_position(self):
+        row = self.create()
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 B', restart_process=True))
+        original_count = len(self.fresh(row.id).status_history)
+        value = service.create_round(self.db, row.id, RoundCreate(round_type='first', position='岗位 A', position_version=1, result='completed'))
+        self.assertIsNone(value.status_history_id)
+        service.update_round(self.db, value.id, RoundUpdate(result='failed'))
+        row = self.fresh(row.id)
+        self.assertEqual((row.position, row.status), ('岗位 B', 'screening'))
+        self.assertEqual(len(row.status_history), original_count)
+        self.assertTrue(all(h.position == '岗位 A' and h.status == 'interviewing' and h.status_history_id is None for h in row.round_result_history))
+
+    def test_historical_create_uses_version_even_when_current_position_has_same_name(self):
+        row = self.create('interviewing')
+        stage_id = row.status_history[0].id
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 B', restart_process=True))
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 A', restart_process=True))
+        value = service.create_round(self.db, row.id, RoundCreate(round_type='first', position='岗位 A', position_version=1, result='passed'))
+        self.assertEqual((value.position_version, value.status_history_id), (1, stage_id))
+        row = self.fresh(row.id)
+        self.assertEqual((row.position_version, row.status), (3, 'screening'))
+        self.assertTrue(all(r.result == 'not_started' for r in row.rounds if r.position_version == 3))
+
+    def test_unknown_position_in_same_version_does_not_change_current_result_or_link(self):
+        row = self.create()
+        row.position = '岗位 B'
+        row.rounds[0].position = None
+        row.status_history[0].position = None
+        self.db.commit()
+        value = service.create_round(self.db, row.id, RoundCreate(round_type='first', position=None, position_version=1, result='completed'))
+        self.assertIsNone(value.position)
+        self.assertIsNone(value.status_history_id)
+        service.patch_status(self.db, row.id, ApplicationStatusPatch(status='interviewing'))
+        row = self.fresh(row.id)
+        self.assertEqual(next(r for r in row.rounds if r.id == value.id).result, 'completed')
+        service.update_round(self.db, value.id, RoundUpdate(result='failed'))
+        row = self.fresh(row.id)
+        latest = max(row.round_result_history, key=lambda h: h.id)
+        self.assertIsNone(latest.position)
+        self.assertIsNone(latest.status_history_id)
+        self.assertEqual(latest.status, 'interviewing')
+
+    def test_round_creation_rejects_nonexistent_or_stale_target_without_writing(self):
+        row = self.create()
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 B', restart_process=True))
+        before = self.fresh(row.id).to_dict()
+        for values in [dict(position='伪造岗位', position_version=1), dict(position='岗位 A', position_version=999),
+                       dict(position='岗位 A', position_version=1, expected_position_version=1)]:
+            with self.subTest(values=values), self.assertRaises(HTTPException) as error:
+                service.create_round(self.db, row.id, RoundCreate(round_type='first', **values))
+            self.assertEqual(error.exception.status_code, 409)
+            self.assertEqual(self.fresh(row.id).to_dict(), before)
+
+    def test_null_round_snapshot_with_explicit_current_stage_still_belongs_to_current(self):
+        row = self.create()
+        row.rounds[0].position = None
+        self.db.commit()
+        service.patch_status(self.db, row.id, ApplicationStatusPatch(status='rescreen'))
+        row = self.fresh(row.id)
+        self.assertEqual(row.rounds[0].result, 'passed')
+
+    def test_http_historical_round_target_validation_and_camel_case(self):
+        row = self.create('interviewing')
+        service.update_application(self.db, row.id, ApplicationUpdate(position='岗位 B', restart_process=True))
+        with patch.dict(app.dependency_overrides, {database.get_db: lambda: self.db}):
+            client = TestClient(app)
+            path = f'/api/jobs/applications/{row.id}/rounds'
+            response = client.post(path, json={'roundType':'first','position':'岗位 A','positionVersion':1,'expectedPositionVersion':2,'result':'failed'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual((response.json()['position'], response.json()['positionVersion']), ('岗位 A', 1))
+            for payload in [{'roundType':'first','positionVersion':1}, {'roundType':'first','position':'岗位 A'},
+                            {'roundType':'first','position':'岗位 A','positionVersion':0}, {'roundType':'first','position':'岗位 A','positionVersion':1,'statusHistoryId':999}]:
+                with self.subTest(payload=payload):
+                    self.assertEqual(client.post(path, json=payload).status_code, 422)
+
     def test_failed_old_position_survives_reapplication(self):
         row = self.create()
         old_id = row.rounds[0].id

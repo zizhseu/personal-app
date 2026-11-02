@@ -3,8 +3,10 @@ import type { Application, InterviewRound, RoundResult } from './types'
 export const positionLabel = (position?: string | null) => position?.trim() || '岗位未记录'
 
 export function isCurrentRound(round: InterviewRound, application: Application): boolean {
-  return (round.positionVersion ?? 1) === (application.positionVersion ?? 1)
-    && (round.position == null || round.position === application.position)
+  const version = round.positionVersion ?? 1
+  const stage = application.statusHistory?.find(row => row.id === round.statusHistoryId && (row.positionVersion ?? 1) === version)
+  return version === (application.positionVersion ?? 1)
+    && (round.position ?? stage?.position ?? null) === application.position
 }
 
 export function currentRounds(application: Application): InterviewRound[] {

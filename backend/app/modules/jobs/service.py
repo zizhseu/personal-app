@@ -77,9 +77,15 @@ def _current_stage(db: Session, row: Application, when: datetime) -> StatusHisto
 
 
 def _current_round(round_row: InterviewRound, app_row: Application) -> bool:
-    return round_row.position_version == app_row.position_version and (
-        round_row.position is None or round_row.position == app_row.position
-    )
+    if round_row.position_version != app_row.position_version:
+        return False
+    position = round_row.position
+    if position is None and round_row.status_history_id:
+        stage = next((h for h in app_row.status_history if h.id == round_row.status_history_id
+                      and h.position_version == round_row.position_version), None)
+        position = stage.position if stage else None
+    # 未知岗位单独归档，不能仅因代次相同就当作当前岗位。
+    return position == app_row.position
 
 
 def _round_stage(db: Session, round_row: InterviewRound, app_row: Application, when: datetime) -> StatusHistory | None:
@@ -89,7 +95,7 @@ def _round_stage(db: Session, round_row: InterviewRound, app_row: Application, w
         return db.get(StatusHistory, round_row.status_history_id)
     candidates = [h for h in app_row.status_history if h.position_version == round_row.position_version
                   and h.status == ROUND_TYPE_STATUS.get(round_row.round_type) and h.changed_at <= when
-                  and (not h.position or not round_row.position or h.position == round_row.position)]
+                  and h.position == round_row.position]
     return max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
 
 
@@ -230,19 +236,33 @@ def _check_round_type_status(round_type: str, app_status: str) -> None:
 
 def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     app_row = get_application(db, app_id)  # 确认父记录存在
-    _check_round_type_status(data.round_type, app_row.status)
+    if data.expected_position_version is not None and data.expected_position_version != app_row.position_version:
+        raise HTTPException(409, "当前岗位已变更，请刷新后确认所属岗位再添加")
+    version = data.position_version if data.position_version is not None else app_row.position_version
+    position = data.position if data.position_version is not None else app_row.position
+    is_current = version == app_row.position_version and position == app_row.position
     when = datetime.now()
-    stage = _current_stage(db, app_row, when)
-    payload = data.model_dump()
+    if is_current:
+        _check_round_type_status(data.round_type, app_row.status)
+        stage = _current_stage(db, app_row, when)
+    else:
+        snapshots = [*app_row.status_history, *app_row.rounds, *app_row.round_result_history]
+        if not any(h.position_version == version and h.position == position for h in snapshots):
+            raise HTTPException(409, "该岗位流程已变更或删除，请刷新后重试")
+        # 历史补录不受当前岗位状态限制，只关联该岗位内与轮次类型匹配的阶段。
+        candidates = [h for h in app_row.status_history if h.position_version == version
+                      and h.position == position and h.status == ROUND_TYPE_STATUS.get(data.round_type)]
+        stage = max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
+    payload = data.model_dump(exclude={"position", "position_version", "expected_position_version"})
     start_at = payload.pop("start_at")
     duration_minutes = payload.pop("duration_minutes")
     # 创建时若结果已不再是「未开始」，记录结果变更时间
     result_changed_at = when if payload.get("result", "not_started") != "not_started" else None
     row = InterviewRound(
         application_id=app_id,
-        position=app_row.position,
-        position_version=app_row.position_version,
-        status_history_id=stage.id,
+        position=position,
+        position_version=version,
+        status_history_id=stage.id if stage else None,
         start_at=start_at,
         duration_minutes=duration_minutes,
         scheduled_at=_deadline(start_at, duration_minutes),

@@ -1,5 +1,5 @@
 import request from '@/shared/api/request'
-import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, ScheduleEvent, EventPayload } from './types'
+import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload } from './types'
 
 /** jobs 模块全部接口调用 */
 
@@ -41,7 +41,7 @@ export function deleteApplication(id: number): Promise<void> {
 
 export function createRound(
   applicationId: number,
-  payload: RoundPayload,
+  payload: RoundCreatePayload,
 ): Promise<Application['rounds'][number]> {
   return request.post(
     `/jobs/applications/${applicationId}/rounds`,

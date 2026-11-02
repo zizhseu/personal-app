@@ -14,11 +14,14 @@ test('改投后的当前结果不使用旧岗位失败记录，再回到同名�
   assert.equal(currentResult(application), 'not_started')
 })
 
-test('同一代旧数据补录为另一个岗位后，不作为当前岗位结果', () => {
+test('同一代旧数据中，另一岗位与未知岗位都不作为当前结果；明确关联可恢复归属', () => {
   const application = { position: '岗位 B', positionVersion: 1, status: 'interviewing', rounds: [
     { id: 1, position: '岗位 A', positionVersion: 1, result: 'failed' },
     { id: 2, position: null, positionVersion: 1, result: 'completed' },
   ] }
+  assert.equal(latestRound(application), null)
+  application.statusHistory = [{ id: 10, position: '岗位 B', positionVersion: 1 }]
+  application.rounds[1].statusHistoryId = 10
   assert.equal(latestRound(application).id, 2)
   application.rounds.pop()
   assert.equal(currentResult(application), null)

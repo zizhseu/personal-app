@@ -7,6 +7,7 @@ import type {
   ApplicationUpdatePayload,
   EventPayload,
   RoundPayload,
+  RoundCreatePayload,
   ScheduleEvent,
 } from './types'
 import * as api from './api'
@@ -64,7 +65,7 @@ export const useJobsStore = defineStore('jobs', {
       ElMessage.success('已删除')
       await this.loadAll()
     },
-    async addRound(applicationId: number, payload: RoundPayload) {
+    async addRound(applicationId: number, payload: RoundCreatePayload) {
       await api.createRound(applicationId, payload)
       ElMessage.success('已添加轮次')
       await this.loadAll()

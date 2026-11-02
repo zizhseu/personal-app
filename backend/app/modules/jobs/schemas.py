@@ -64,12 +64,23 @@ class OfferDecisionPatch(CamelModel):
     offer_decision: Literal["accepted", "rejected_offer"]
 
 
-class RoundCreate(CamelModel):
+class RoundCreate(PositionInput):
+    model_config = ConfigDict(extra="forbid")
+
+    # 同时传入岗位快照与流程代次时，向该岗位流程补录；省略时沿用当前岗位。
+    position_version: int | None = Field(default=None, ge=1)
+    expected_position_version: int | None = Field(default=None, ge=1)
     round_type: Literal[ROUND_TYPES]
     start_at: datetime | None = None      # 开始时间
     duration_minutes: int | None = None   # 持续分钟数（截止时间 = 开始 + 持续，后端计算）
     result: Literal[ROUND_RESULTS] = "not_started"
     review_note: str | None = None
+
+    @model_validator(mode="after")
+    def check_target_position(self):
+        if (self.position_version is not None) != ("position" in self.model_fields_set):
+            raise ValueError("指定岗位流程时，需同时提供 positionVersion 和 position（未知岗位可传 null）")
+        return self
 
 
 class RoundUpdate(PositionInput):

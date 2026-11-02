@@ -5,6 +5,7 @@
     width="min(520px, calc(100vw - 32px))"
     :close-on-click-modal="false"
   >
+    <p v-if="!isEdit" class="target-position">所属岗位：{{ positionLabel(target ? target.position : app?.position) }}<span v-if="target && !target.isCurrent"> · 历史流程</span></p>
     <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
       <el-form-item v-if="isEdit" label="此轮岗位">
         <el-input v-model="form.position" maxlength="100" placeholder="岗位名称（未知时可补录）" aria-label="此轮岗位" />
@@ -14,7 +15,7 @@
         <el-select v-model="form.roundType" style="width: 100%">
           <el-option v-for="t in allowedTypes" :key="t" :label="ROUND_TYPE_LABELS[t]" :value="t" />
         </el-select>
-        <div class="type-hint">轮次需与当前状态匹配：测评/笔试/面试轮次要先把状态改到对应阶段</div>
+        <div class="type-hint">{{ isHistoricalCreate ? '补录至所选岗位的历史流程，可选择实际轮次类型；当前岗位和状态不会改变。' : '轮次需与当前状态匹配：测评/笔试/面试轮次要先把状态改到对应阶段' }}</div>
       </el-form-item>
       <el-form-item label="开始时间" prop="startAt">
         <el-date-picker
@@ -67,7 +68,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import type { InterviewRound, RoundPayload, RoundResult, RoundType } from '../types'
+import type { InterviewRound, RoundPayload, RoundResult, RoundTarget, RoundType } from '../types'
 import {
   ROUND_TYPE_LABELS,
   RESULT_LABELS,
@@ -76,12 +77,13 @@ import {
   OFFER_RESULT_OPTIONS,
 } from '../constants'
 import { useJobsStore } from '../store'
-import { isCurrentRound } from '../selectors'
+import { isCurrentRound, positionLabel } from '../selectors'
 
 const props = defineProps<{
   applicationId: number
   /** 编辑时传入已有轮次数据 */
   round?: InterviewRound | null
+  target?: RoundTarget | null
 }>()
 
 const store = useJobsStore()
@@ -91,6 +93,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 
 const isEdit = computed(() => !!props.round?.id)
+const isHistoricalCreate = computed(() => !isEdit.value && props.target != null && !props.target.isCurrent)
+const expectedPositionVersion = ref<number>()
 
 const app = computed(() => store.applications.find((a) => a.id === props.applicationId))
 const effectiveStatus = computed(() => {
@@ -103,6 +107,8 @@ const effectiveStatus = computed(() => {
 /** 当前状态下允许的轮次类型（硬约束：轮次需与状态匹配；「其他」不限） */
 const allowedTypes = computed<RoundType[]>(() => {
   const all = Object.keys(ROUND_TYPE_LABELS) as RoundType[]
+  if (isHistoricalCreate.value) return all.sort((left, right) =>
+    Number(ROUND_TYPE_STATUS[right] === props.target?.status) - Number(ROUND_TYPE_STATUS[left] === props.target?.status))
   const allowed = all.filter((t) => {
     const required = ROUND_TYPE_STATUS[t]
     return required === null || required === effectiveStatus.value
@@ -115,7 +121,7 @@ const allowedTypes = computed<RoundType[]>(() => {
 
 /** 当前状态下可选的结果（Offer 态仅接受 / 拒绝；编辑时保留原结果可见） */
 const resultOptions = computed<RoundResult[]>(() => {
-  const opts = [...(effectiveStatus.value === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
+  const opts = [...(!isHistoricalCreate.value && effectiveStatus.value === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
   const cur = props.round?.result
   if (cur && !opts.includes(cur)) opts.push(cur)
   return opts
@@ -150,6 +156,7 @@ const deadlineText = computed(() => {
 
 watch(visible, (v) => {
   if (v) {
+    expectedPositionVersion.value = app.value?.positionVersion
     // 只拷贝表单关心的字段，避免把 id/applicationId 等额外属性带进 payload
     const r = props.round
     Object.assign(form, emptyForm(), {
@@ -176,7 +183,12 @@ async function save() {
     if (isEdit.value) {
       await store.updateRound(props.round!.id, form)
     } else {
-      await store.addRound(props.applicationId, form)
+      const { position: _position, ...fields } = form
+      await store.addRound(props.applicationId, {
+        ...fields,
+        ...(props.target ? { position: props.target.position, positionVersion: props.target.positionVersion } : {}),
+        expectedPositionVersion: expectedPositionVersion.value,
+      })
     }
     visible.value = false
   } finally {
@@ -186,6 +198,8 @@ async function save() {
 </script>
 
 <style scoped>
+.target-position { margin: 0 0 18px; color: var(--ink-2); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.target-position span { color: var(--ink-3); }
 .type-hint {
   flex-basis: 100%;
   font-size: 12px;

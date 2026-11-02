@@ -127,6 +127,19 @@ export interface RoundPayload {
   reviewNote?: string | null
 }
 
+/** 新增轮次时明确目标岗位流程；旧接口调用可省略并沿用当前岗位。 */
+export interface RoundCreatePayload extends RoundPayload {
+  positionVersion?: number
+  expectedPositionVersion?: number
+}
+
+export interface RoundTarget {
+  position: string | null
+  positionVersion: number
+  isCurrent: boolean
+  status?: ApplicationStatus | null
+}
+
 /** 自定义日程类型 */
 export type EventType = 'talk' | 'other'
 
