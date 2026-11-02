@@ -72,11 +72,12 @@ const todayStart = () => dayjs().startOf('day')
 /** 已办对应的轮次结果（做过 / 有结果） */
 const DONE_RESULTS: RoundResult[] = ['completed', 'passed', 'failed', 'not_attended']
 
-/** 有计划时间的流程轮次 → 日程项（展示与排序用截止时间，老数据回退开始时间） */
+/** 有计划时间的实际安排 → 日程项；初筛只属于流程记录，不进入日程。 */
 const roundItems = computed<ScheduleItem[]>(() => {
   const items: ScheduleItem[] = []
   for (const app of store.applications) {
     for (const round of app.rounds) {
+      if (round.roundType === 'screening') continue
       const when = round.scheduledAt ?? round.startAt
       if (when) {
         // 已有结果的轮次显示实际完成时间，否则显示截止时间
