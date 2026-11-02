@@ -111,7 +111,7 @@
         filter-placement="bottom-end"
       >
         <template #default="{ row }">
-          <el-dropdown trigger="click" @command="(s: ApplicationStatus) => store.quickSetStatus(row.id, s)">
+          <el-dropdown v-if="hasCurrentPosition(row)" trigger="click" @command="(s: ApplicationStatus) => store.quickSetStatus(row.id, s)">
             <span class="status-trigger" @click.stop>
               <StatusTag :status="row.status" />
               <el-icon class="caret"><CaretBottom /></el-icon>
@@ -129,6 +129,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <span v-else class="base-empty">暂无当前岗位</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -213,7 +214,7 @@ import StatusTag from '../components/StatusTag.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
-import { currentResult, currentRounds, latestRound } from '../selectors'
+import { currentResult, currentRounds, latestRound, hasCurrentPosition } from '../selectors'
 import type { Application, ApplicationStatus, RoundResult } from '../types'
 import { useListViewState } from '@/shared/composables/useListViewState'
 import { choiceField, listField, pageField, textField } from '@/shared/state/pageState'
@@ -280,7 +281,7 @@ const filtered = computed(() => {
     )
   }
   if (statusFilter.value.length) {
-    list = list.filter((a) => statusFilter.value.includes(a.status))
+    list = list.filter((a) => hasCurrentPosition(a) && statusFilter.value.includes(a.status))
   }
   if (resultFilter.value.length) {
     list = list.filter((a) => {
@@ -353,7 +354,7 @@ watch([sortBy, sortOrder], async () => {
 
 /** EP 侧过滤与数据层过滤同条件，幂等 */
 function filterStatusMethod(value: ApplicationStatus, row: ListRow) {
-  return row.status === value
+  return hasCurrentPosition(row) && row.status === value
 }
 
 function filterResultMethod(value: RoundResult, row: ListRow) {
@@ -362,6 +363,7 @@ function filterResultMethod(value: RoundResult, row: ListRow) {
 
 /** 结果列显示：Offer 态显示 Offer 决定（未决定显示「待决定」），其余显示最新轮次结果 */
 function resultDisplay(row: ListRow): { label: string; color: string } | null {
+  if (!hasCurrentPosition(row)) return null
   if (row.status === 'offer') {
     return row.offerDecision
       ? { label: RESULT_LABELS[row.offerDecision], color: RESULT_COLORS[row.offerDecision] }

@@ -59,7 +59,7 @@ export function groupPositionHistory(application: Application): PositionHistoryG
     }
     return group
   }
-  ensure(currentVersion, application.position)
+  if (application.hasCurrentPosition !== false) ensure(currentVersion, application.position)
 
   for (const stage of application.statusHistory) {
     ensure(stage.positionVersion ?? 1, stage.position).statusHistory.push(stage)

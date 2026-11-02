@@ -74,12 +74,13 @@ import type { Dayjs } from 'dayjs'
 import StatCard from '../components/StatCard.vue'
 import { STATUS_COLORS, STATUS_LABELS, STATUS_ORDER, RESULT_COLORS, RESULT_LABELS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'
 import { useJobsStore } from '../store'
-import { resultBucket, type ResultBucket } from '../selectors'
+import { resultBucket, hasCurrentPosition, type ResultBucket } from '../selectors'
 import type { ApplicationStatus } from '../types'
 
 use([CanvasRenderer, PieChart, BarChart, TooltipComponent, LegendComponent, GridComponent])
 
 const store = useJobsStore()
+const activeApplications = computed(() => store.applications.filter(hasCurrentPosition))
 
 onMounted(() => store.ensureLoaded())
 
@@ -106,7 +107,7 @@ const trendShortcuts = [
 
 // ---------- 统计卡片 ----------
 const statCards = computed(() => {
-  const apps = store.applications
+  const apps = activeApplications.value
   const weekAgo = dayjs().subtract(7, 'day')
   return [
     { label: '投递总数', value: apps.length, dot: '#6366f1' },
@@ -124,7 +125,7 @@ const statCards = computed(() => {
 const statusOption = computed(() => {
   const counts = STATUS_ORDER.map((s) => ({
     name: STATUS_LABELS[s],
-    value: store.applications.filter((a) => a.status === s).length,
+    value: activeApplications.value.filter((a) => a.status === s).length,
     itemStyle: { color: STATUS_COLORS[s as ApplicationStatus] },
   })).filter((d) => d.value > 0)
   if (counts.length === 0) return null
@@ -147,10 +148,10 @@ const statusOption = computed(() => {
 
 // ---------- 结果分布：每条投递只计当前展示的一个结果 ----------
 const resultOption = computed(() => {
-  if (store.applications.length === 0) return null
+  if (activeApplications.value.length === 0) return null
 
   const tally = new Map<ResultBucket, number>()
-  for (const application of store.applications) {
+  for (const application of activeApplications.value) {
     const bucket = resultBucket(application)
     tally.set(bucket, (tally.get(bucket) ?? 0) + 1)
   }
@@ -207,7 +208,7 @@ const trendOption = computed(() => {
   }
 
   const counts = buckets.map((b) =>
-    store.applications.filter((a) => {
+    activeApplications.value.filter((a) => {
       if (!a.applyDate) return false
       const d = dayjs(a.applyDate)
       return d.isAfter(b.start.subtract(1, 'ms')) && d.isBefore(b.end.add(1, 'ms'))

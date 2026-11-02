@@ -5,6 +5,7 @@
         <div class="head-line">
           <span class="title">{{ app.company }}{{ app.position ? ` · ${app.position}` : '' }}</span>
           <el-dropdown
+            v-if="hasActivePosition"
             trigger="click"
             @command="quickSetStatus"
           >
@@ -25,6 +26,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <span v-else class="inactive-position">暂无当前岗位</span>
         </div>
       </template>
     </el-page-header>
@@ -33,9 +35,10 @@
     <el-card shadow="never" class="info-card">
       <el-descriptions :column="narrow ? 1 : 3" border>
         <el-descriptions-item label="公司">{{ app.company }}</el-descriptions-item>
-        <el-descriptions-item label="当前岗位">{{ app.position ?? '—' }}</el-descriptions-item>
+        <el-descriptions-item label="当前岗位">{{ hasActivePosition ? app.position ?? '未填写' : '暂无当前岗位' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <StatusTag :status="app.status" />
+          <StatusTag v-if="hasActivePosition" :status="app.status" />
+          <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="投递链接">
           <a
@@ -60,7 +63,7 @@
         </el-descriptions-item>
       </el-descriptions>
       <div class="info-actions">
-        <el-button plain @click="positionVisible = true">更换岗位</el-button>
+        <el-button plain @click="positionVisible = true">{{ hasActivePosition ? '更换岗位' : '新增岗位' }}</el-button>
         <el-button type="primary" plain icon="Edit" @click="editVisible = true">编辑投递</el-button>
       </div>
     </el-card>
@@ -74,14 +77,16 @@
         </div>
         <el-button v-if="positionGroups.length > 1" link type="primary" @click="toggleAllPositions">{{ allPositionsExpanded ? '仅展开当前' : '展开全部' }}</el-button>
       </div>
-      <div class="position-list">
+      <div v-if="positionGroups.length" class="position-list">
         <PositionHistoryGroup
           v-for="group in positionGroups"
           :key="`${app.id}:${group.key}`"
           :group="group"
           :expanded="expandedPositions.has(group.key)"
+          :deleting="deletingPositionKey === group.key"
           @toggle="togglePosition(group.key)"
           @add-round="openAddRound(group)"
+          @remove-position="confirmRemovePosition(group)"
           @edit-round="openEditRound"
           @remove-round="confirmRemoveRound"
           @edit-stage="editStagePosition"
@@ -89,6 +94,9 @@
           @remove-result="removeResultRow"
         />
       </div>
+      <el-empty v-else description="暂无岗位，新增后即可记录流程轮次与状态变化">
+        <el-button type="primary" @click="positionVisible = true">新增岗位</el-button>
+      </el-empty>
     </section>
 
     <ApplicationFormDialog v-model="editVisible" :application="app" />
@@ -112,6 +120,8 @@ import RoundFormDialog from '../components/RoundFormDialog.vue'
 import PositionChangeDialog from '../components/PositionChangeDialog.vue'
 import PositionHistoryGroup from '../components/PositionHistoryGroup.vue'
 import { groupPositionHistory } from '../history'
+import type { PositionHistoryGroup as PositionGroup } from '../history'
+import { hasCurrentPosition, positionLabel } from '../selectors'
 import { STATUS_LABELS, STATUS_ORDER } from '../constants'
 import { useJobsStore } from '../store'
 import type { ApplicationStatus, InterviewRound, RoundResultChange, RoundTarget, StatusHistory } from '../types'
@@ -130,8 +140,10 @@ const positionVisible = ref(false)
 const roundVisible = ref(false)
 const editingRound = ref<InterviewRound | null>(null)
 const roundTarget = ref<RoundTarget | null>(null)
+const deletingPositionKey = ref<string | null>(null)
 onMounted(() => store.ensureLoaded())
 const app = computed(() => store.applications.find(row => row.id === Number(route.params.id)))
+const hasActivePosition = computed(() => !!app.value && hasCurrentPosition(app.value))
 const positionGroups = computed(() => app.value ? groupPositionHistory(app.value) : [])
 const expandedPositions = ref(new Set<string>())
 let expandedApplicationId: number | undefined
@@ -141,7 +153,8 @@ watch(positionGroups, (groups, previousGroups) => {
   if (expandedApplicationId !== app.value?.id) {
     // 新打开详情时只展开当前岗位；同一详情内的刷新保留用户的展开选择。
     expandedApplicationId = app.value?.id
-    expandedPositions.value = new Set(groups.filter(group => group.isCurrent).map(group => group.key))
+    const initial = groups.find(group => group.isCurrent) ?? groups[0]
+    expandedPositions.value = new Set(initial ? [initial.key] : [])
     return
   }
   const keys = new Set(groups.map(group => group.key))
@@ -149,6 +162,7 @@ watch(positionGroups, (groups, previousGroups) => {
   const expanded = new Set([...expandedPositions.value].filter(key => keys.has(key)))
   // 换岗位或补录导致新分组出现时，展开该组以显示刚保存的内容。
   for (const group of groups) if (!previousKeys.has(group.key)) expanded.add(group.key)
+  if (!expanded.size && !groups.some(group => group.isCurrent) && groups[0]) expanded.add(groups[0].key)
   expandedPositions.value = expanded
 }, { immediate: true })
 
@@ -201,6 +215,22 @@ async function confirmRemoveRound(round: InterviewRound) {
   }).catch(() => false)
   if (ok) await store.removeRound(round.id)
 }
+
+async function confirmRemovePosition(group: PositionGroup) {
+  if (!app.value || deletingPositionKey.value) return
+  const applicationId = app.value.id
+  const payload = { position: group.position, positionVersion: group.positionVersion, expectedPositionVersion: app.value.positionVersion }
+  const consequence = group.isCurrent ? '当前岗位将留空，公司和其他岗位的历史保留。' : '公司和其他岗位的记录保留。'
+  deletingPositionKey.value = group.key
+  try {
+    const ok = await ElMessageBox.confirm(
+      `删除「${positionLabel(group.position)}」（第 ${group.positionVersion} 次流程）及其 ${group.rounds.length} 个轮次、${group.statusHistory.length} 条状态变化、${group.resultHistory.length} 条结果记录？${consequence}删除后无法撤销。`,
+      '删除岗位', { type: 'warning', confirmButtonText: '删除岗位', cancelButtonText: '取消', customClass: 'position-delete-confirm' },
+    ).then(() => true).catch(() => false)
+    if (ok) await store.removePosition(applicationId, payload)
+  } catch { /* 请求层提示错误，保留原岗位供用户核对。 */ }
+  finally { deletingPositionKey.value = null }
+}
 </script>
 
 <style scoped>
@@ -221,4 +251,6 @@ async function confirmRemoveRound(round: InterviewRound) {
 .section-heading h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
 .section-heading p { margin: 5px 0 0; color: var(--ink-3); font-size: 13px; line-height: 1.6; }
 .position-list { display: flex; flex-direction: column; gap: 12px; }
+.inactive-position { color: var(--ink-3); font-size: 13px; }
+:global(.position-delete-confirm) { width: 440px; max-width: calc(100vw - 32px); }
 </style>

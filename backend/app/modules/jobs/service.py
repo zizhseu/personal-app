@@ -20,10 +20,12 @@ from app.modules.jobs.schemas import (
     EventCreate,
     EventUpdate,
     OfferDecisionPatch,
+    PositionDeleteInput,
     RoundCreate,
     RoundUpdate,
     StatusHistoryPositionInput,
 )
+from app.modules.jobs.positions import position_groups, recorded_position
 
 
 def list_applications(
@@ -43,7 +45,8 @@ def list_applications(
         like = f"%{keyword}%"
         stmt = stmt.where(Application.company.like(like) | Application.position.like(like))
     stmt = stmt.order_by(Application.apply_date.is_not(None), Application.apply_date.desc())
-    return list(db.scalars(stmt).unique().all())
+    rows = list(db.scalars(stmt).unique().all())
+    return [row for row in rows if not status or row.has_current_position]
 
 
 def get_application(db: Session, app_id: int) -> Application:
@@ -155,6 +158,8 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
         raise HTTPException(409, "岗位已在其他操作中变更，请刷新记录后重试")
     position_changed = "position" in updates and updates["position"] != (row.position.strip() or None if row.position else None)
     new_position_period = position_changed or restart
+    if not row.has_current_position and not new_position_period and updates.get("status", row.status) != row.status:
+        raise HTTPException(422, "请先新增岗位，再设置状态")
     when = datetime.now()
     old_status = row.status  # 先取旧状态（setattr 会覆盖）
     if new_position_period:
@@ -184,6 +189,8 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
 
 def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Application:
     row = get_application(db, app_id)
+    if not row.has_current_position:
+        raise HTTPException(422, "请先新增岗位，再设置状态")
     if row.status != data.status:
         when, old_status = datetime.now(), row.status
         row.status = data.status
@@ -210,6 +217,45 @@ def delete_application(db: Session, app_id: int) -> None:
     row = get_application(db, app_id)
     db.delete(row)
     db.commit()
+
+
+def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Application:
+    row = get_application(db, app_id)
+    if row.position_version != data.expected_position_version:
+        raise HTTPException(409, "当前岗位已变更，请刷新后重新确认删除范围")
+    groups = position_groups(row)
+    key = (data.position_version, recorded_position(data.position))
+    target = groups.get(key)
+    if target is None:
+        raise HTTPException(409, "该岗位流程已变更或删除，请刷新后重试")
+    round_ids = {item.id for item in target.rounds}
+    result_ids = {item.id for item in target.results}
+    stage_ids = {item.id for item in target.stages}
+    if round_ids and db.scalar(select(RoundResultHistory.id).where(
+            RoundResultHistory.round_id.in_(round_ids), RoundResultHistory.id.not_in(result_ids)).limit(1)) is not None:
+        raise HTTPException(409, "存在其他岗位的结果关联，请先更正相关岗位后删除")
+    # 异常的跨公司阶段关联也不应通过级联影响其他公司的记录。
+    for model in (InterviewRound, RoundResultHistory):
+        if stage_ids and db.scalar(select(model.id).where(model.status_history_id.in_(stage_ids),
+                model.application_id != app_id).limit(1)) is not None:
+            raise HTTPException(409, "存在其他公司的阶段关联，请先更正后删除")
+    is_current = key == (row.position_version, recorded_position(row.position))
+    values = {"position_version": row.position_version}
+    if is_current:
+        versions = [row.position_version, *(version for version, _ in groups)]
+        values.update(position=None, position_version=max(versions) + 1, status="screening", offer_decision=None)
+    changed = db.execute(update(Application).where(Application.id == app_id,
+        Application.position_version == data.expected_position_version).values(**values))
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "岗位已变更，请刷新后重试")
+    for items in (target.results, target.rounds, target.stages):
+        for item in items:
+            db.delete(item)
+        db.flush()
+    db.commit()
+    db.expire_all()
+    return get_application(db, app_id)
 
 
 def _deadline(
@@ -241,6 +287,8 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     version = data.position_version if data.position_version is not None else app_row.position_version
     position = data.position if data.position_version is not None else app_row.position
     is_current = version == app_row.position_version and position == app_row.position
+    if is_current and not app_row.has_current_position:
+        raise HTTPException(409, "当前岗位已删除，请先新增岗位")
     when = datetime.now()
     if is_current:
         _check_round_type_status(data.round_type, app_row.status)

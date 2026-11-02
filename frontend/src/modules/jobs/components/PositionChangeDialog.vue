@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="visible" title="更换岗位" width="min(480px, calc(100vw - 32px))" :close-on-click-modal="false">
-    <p class="position-context">{{ application.company }} · 当前岗位：{{ application.position || '未填写' }}</p>
+  <el-dialog v-model="visible" :title="application.hasCurrentPosition === false ? '新增岗位' : '更换岗位'" width="min(480px, calc(100vw - 32px))" :close-on-click-modal="false">
+    <p class="position-context">{{ application.company }} · {{ application.hasCurrentPosition === false ? '暂无当前岗位' : `当前岗位：${application.position || '未填写'}` }}</p>
     <el-form ref="formRef" :model="form" label-position="top" @submit.prevent="save">
       <el-form-item label="新岗位" prop="position" :rules="[{ required: true, whitespace: true, message: '请填写岗位名称', trigger: 'blur' }]">
         <el-input v-model="form.position" maxlength="100" placeholder="填写新的岗位名称" aria-label="新岗位名称" :disabled="saving" />
@@ -8,7 +8,7 @@
       <el-checkbox v-model="form.restart" :disabled="saving">重新从初筛开始</el-checkbox>
       <p class="position-hint">{{ form.restart ? '保存后将为该岗位新增初筛轮次，之前的流程和结果会保留。' : '继续当前阶段，并为新岗位单独记录后续流程。' }}</p>
     </el-form>
-    <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">确认变更</el-button></template>
+    <template #footer><el-button :disabled="saving" @click="visible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">{{ application.hasCurrentPosition === false ? '添加岗位' : '确认变更' }}</el-button></template>
   </el-dialog>
 </template>
 

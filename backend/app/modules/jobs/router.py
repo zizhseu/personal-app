@@ -11,6 +11,7 @@ from app.modules.jobs.schemas import (
     EventCreate,
     EventUpdate,
     OfferDecisionPatch,
+    PositionDeleteInput,
     RoundCreate,
     RoundUpdate,
     StatusHistoryPositionInput,
@@ -65,6 +66,11 @@ def delete_application(app_id: int, db: Session = Depends(get_db)):
 @router.post("/applications/{app_id}/rounds")
 def create_round(app_id: int, data: RoundCreate, db: Session = Depends(get_db)):
     return service.create_round(db, app_id, data).to_dict()
+
+
+@router.delete("/applications/{app_id}/positions")
+def delete_position(app_id: int, data: PositionDeleteInput, db: Session = Depends(get_db)):
+    return service.delete_position(db, app_id, data).to_dict()
 
 
 @router.put("/rounds/{round_id}")

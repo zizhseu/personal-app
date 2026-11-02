@@ -1,5 +1,5 @@
 import request from '@/shared/api/request'
-import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload } from './types'
+import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload, PositionDeletePayload } from './types'
 
 /** jobs 模块全部接口调用 */
 
@@ -37,6 +37,10 @@ export function patchOfferDecision(
 
 export function deleteApplication(id: number): Promise<void> {
   return request.delete(`/jobs/applications/${id}`) as Promise<void>
+}
+
+export function deletePosition(id: number, payload: PositionDeletePayload): Promise<Application> {
+  return request.delete(`/jobs/applications/${id}/positions`, { data: payload }) as Promise<Application>
 }
 
 export function createRound(

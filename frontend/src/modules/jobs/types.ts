@@ -83,6 +83,7 @@ export interface Application {
   company: string
   position: string | null
   positionVersion: number
+  hasCurrentPosition: boolean
   url: string | null
   applyDate: string | null
   salary: string | null
@@ -138,6 +139,12 @@ export interface RoundTarget {
   positionVersion: number
   isCurrent: boolean
   status?: ApplicationStatus | null
+}
+
+export interface PositionDeletePayload {
+  position: string | null
+  positionVersion: number
+  expectedPositionVersion: number
 }
 
 /** 自定义日程类型 */

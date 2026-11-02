@@ -147,3 +147,20 @@ test('结果缺失名称且阶段关联冲突时，仍随明确所属轮次留�
   assert.equal(rows[0].resultHistory.length, 0)
   assert.deepEqual(rows[1].unassignedResults.map(item => item.id), [1])
 })
+
+test('删除当前岗位后只展示保留的历史，不生成空的未知当前岗位', () => {
+  const input = application({ position:null, positionVersion:4, hasCurrentPosition:false,
+    rounds:[round(1,'岗位 A',1),round(2,'岗位 B',2)],statusHistory:[stage(1,'岗位 A',1),stage(2,'岗位 B',2)] })
+  const groups = groupPositionHistory(input)
+  assert.deepEqual(groups.map(row=>[row.position,row.isCurrent]), [['岗位 B',false],['岗位 A',false]])
+  assert.equal(latestRound(input), null)
+  assert.equal(currentResult(input), null)
+  assert.equal(resultBucket(input), 'unrecorded')
+})
+
+test('删除最后一个岗位后公司没有岗位分组，新岗位可独立重新开始', () => {
+  const input = application({ position:null, positionVersion:4, hasCurrentPosition:false })
+  assert.deepEqual(groupPositionHistory(input), [])
+  Object.assign(input,{position:'岗位 C',positionVersion:5,hasCurrentPosition:true,rounds:[round(5,'岗位 C',5)],statusHistory:[stage(5,'岗位 C',5)]})
+  assert.deepEqual(groupPositionHistory(input).map(row=>[row.position,row.positionVersion,row.isCurrent]), [['岗位 C',5,true]])
+})

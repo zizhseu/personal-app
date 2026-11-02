@@ -37,6 +37,12 @@ class Application(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+    @property
+    def has_current_position(self) -> bool:
+        # 删除当前岗位会保留一个无记录的空版本，避免旧请求重新写回已删除岗位。
+        return self.position is not None or any(item.position_version == self.position_version
+            for items in (self.rounds, self.status_history, self.round_result_history) for item in items)
+
     def to_dict(self) -> dict:
         # 有时间的按时间升序在前，空时间排最后
         ordered_rounds = sorted(
@@ -56,6 +62,7 @@ class Application(Base, TimestampMixin):
             "company": self.company,
             "position": self.position,
             "positionVersion": self.position_version,
+            "hasCurrentPosition": self.has_current_position,
             "url": self.url,
             "applyDate": self.apply_date.isoformat() if self.apply_date else None,
             "salary": self.salary,

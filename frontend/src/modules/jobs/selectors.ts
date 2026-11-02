@@ -1,6 +1,7 @@
 import type { Application, InterviewRound, RoundResult } from './types'
 
 export const positionLabel = (position?: string | null) => position?.trim() || '岗位未记录'
+export const hasCurrentPosition = (application: Application) => application.hasCurrentPosition !== false
 
 export function isCurrentRound(round: InterviewRound, application: Application): boolean {
   const version = round.positionVersion ?? 1
@@ -10,6 +11,7 @@ export function isCurrentRound(round: InterviewRound, application: Application):
 }
 
 export function currentRounds(application: Application): InterviewRound[] {
+  if (!hasCurrentPosition(application)) return []
   return application.rounds.filter(round => isCurrentRound(round, application))
 }
 
@@ -23,6 +25,7 @@ export function latestRound(application: Application): InterviewRound | null {
 
 /** 与投递列表的「结果」列统一口径：Offer 看决定，其他状态看最新轮次。 */
 export function currentResult(application: Application): RoundResult | null {
+  if (!hasCurrentPosition(application)) return null
   return application.status === 'offer'
     ? application.offerDecision
     : latestRound(application)?.result ?? null
@@ -31,6 +34,7 @@ export function currentResult(application: Application): RoundResult | null {
 export type ResultBucket = RoundResult | 'undecided' | 'unrecorded'
 
 export function resultBucket(application: Application): ResultBucket {
+  if (!hasCurrentPosition(application)) return 'unrecorded'
   const result = currentResult(application)
   if (result) return result
   return application.status === 'offer' ? 'undecided' : 'unrecorded'

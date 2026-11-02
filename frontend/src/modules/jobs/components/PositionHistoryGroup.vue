@@ -1,6 +1,7 @@
 <template>
   <article class="position-group" :class="{ current: group.isCurrent }" :data-position="group.position ?? ''" :data-position-version="group.positionVersion">
-    <h3 class="position-heading">
+    <div class="position-heading">
+      <h3 class="position-title">
       <button class="position-toggle" :aria-expanded="expanded" :aria-controls="bodyId" @click="emit('toggle')">
         <span class="position-identity">
           <el-icon class="position-caret" :class="{ open: expanded }"><ArrowRight /></el-icon>
@@ -13,7 +14,9 @@
           <span>{{ group.rounds.length }} 个轮次 · {{ group.statusHistory.length }} 次状态变化</span>
         </span>
       </button>
-    </h3>
+      </h3>
+      <el-button link type="danger" class="delete-position" :loading="deleting" @click="emit('removePosition')">删除岗位</el-button>
+    </div>
 
     <div v-show="expanded" :id="bodyId" class="position-body">
       <p v-if="!group.position" class="unknown-position">这些记录未保存岗位名称，可在轮次或状态变化中补录。</p>
@@ -97,10 +100,11 @@ import { formatDateTime } from '@/shared/utils/format'
 import type { PositionHistoryGroup } from '../history'
 import type { InterviewRound, RoundResultChange, RoundType, StatusHistory } from '../types'
 
-const props = defineProps<{ group: PositionHistoryGroup; expanded: boolean }>()
+const props = defineProps<{ group: PositionHistoryGroup; expanded: boolean; deleting?: boolean }>()
 const emit = defineEmits<{
   toggle: []
   addRound: []
+  removePosition: []
   editRound: [round: InterviewRound]
   removeRound: [round: InterviewRound]
   editStage: [stage: StatusHistory]
@@ -143,7 +147,9 @@ function roundTimeText(round: InterviewRound): string {
   overflow: hidden;
 }
 .position-group.current { border-left-color: var(--el-color-primary); }
-.position-heading { margin: 0; font-size: inherit; }
+.position-heading { display: flex; align-items: center; }
+.position-title { flex: 1; min-width: 0; margin: 0; font-size: inherit; }
+.delete-position { flex-shrink: 0; margin: 0 16px 0 0; }
 .position-toggle {
   width: 100%;
   display: flex;
