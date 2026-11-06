@@ -21,6 +21,7 @@ from app.modules.jobs.schemas import (
     EventUpdate,
     OfferDecisionPatch,
     PositionDeleteInput,
+    PositionRenameInput,
     PrimaryPositionInput,
     PositionStatusPatch,
     RoundCreate,
@@ -281,6 +282,61 @@ def set_primary_position(db: Session, app_id: int, data: PrimaryPositionInput) -
     db.commit()
     db.expire_all()
     return get_application(db, app_id)
+
+
+def rename_position(db: Session, app_id: int, data: PositionRenameInput) -> Application:
+    """在一次事务中更新所选岗位的名称及全部快照。"""
+    get_application(db, app_id)
+    try:
+        locked = db.execute(update(Application).where(
+            Application.id == app_id,
+            Application.position_version == data.expected_position_version,
+        ).values(updated_at=Application.updated_at))
+        if locked.rowcount != 1:
+            raise HTTPException(409, "岗位记录已变更，请刷新后重试")
+        db.expire_all()
+        row = get_application(db, app_id)
+        groups = position_groups(row)
+        key = (data.position_version, recorded_position(data.position))
+        new_key = (data.position_version, data.new_position)
+        target = groups.get(key)
+        already_renamed = target is None
+        if already_renamed:
+            target = groups.get(new_key)
+        if target is None:
+            raise HTTPException(409, "所选岗位已变更或删除，请刷新后重试")
+        members = (
+            (InterviewRound, target.rounds, data.expected_round_ids),
+            (StatusHistory, target.stages, data.expected_status_history_ids),
+            (RoundResultHistory, target.results, data.expected_result_history_ids),
+        )
+        for _, items, expected in members:
+            actual = {item.id for item in items}
+            if expected is None or len(expected) != len(set(expected)) or set(expected) != actual:
+                raise HTTPException(409, "岗位记录范围已更新，请刷新后重新编辑")
+        # 完全相同的请求重试时，确认成员范围后直接返回。
+        if already_renamed or key == new_key:
+            db.commit()
+            return row
+        if new_key in groups:
+            raise HTTPException(409, "同一流程已有该名称的岗位，请使用不同名称")
+        values = {"updated_at": Application.updated_at}
+        if row.has_current_position and key == (row.position_version, recorded_position(row.position)):
+            values["position"] = data.new_position
+        if key == (row.primary_position_version, recorded_position(row.primary_position)):
+            values["primary_position"] = data.new_position
+        db.execute(update(Application).where(Application.id == app_id).values(**values))
+        for model, items, _ in members:
+            db.execute(update(model).where(
+                model.application_id == app_id,
+                model.id.in_([item.id for item in items]),
+            ).values(position=data.new_position, updated_at=model.updated_at))
+        db.commit()
+        db.expire_all()
+        return get_application(db, app_id)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Application:

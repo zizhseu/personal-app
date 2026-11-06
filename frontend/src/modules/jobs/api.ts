@@ -1,5 +1,5 @@
 import request from '@/shared/api/request'
-import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload, PositionDeletePayload, PrimaryPositionPayload, PositionStatusPayload } from './types'
+import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload, PositionDeletePayload, PositionRenamePayload, PrimaryPositionPayload, PositionStatusPayload } from './types'
 
 /** jobs 模块全部接口调用 */
 
@@ -45,6 +45,10 @@ export function deleteApplication(id: number): Promise<void> {
 
 export function deletePosition(id: number, payload: PositionDeletePayload): Promise<Application> {
   return request.delete(`/jobs/applications/${id}/positions`, { data: payload }) as Promise<Application>
+}
+
+export function renamePosition(id: number, payload: PositionRenamePayload): Promise<Application> {
+  return request.patch(`/jobs/applications/${id}/positions/name`, payload) as Promise<Application>
 }
 
 export function setPrimaryPosition(id: number, payload: PrimaryPositionPayload): Promise<Application> {

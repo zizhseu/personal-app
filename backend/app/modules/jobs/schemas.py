@@ -71,6 +71,20 @@ class PrimaryPositionInput(PositionInput):
     expected_position_version: int = Field(ge=1)
 
 
+class PositionRenameInput(PositionDeleteInput):
+    """补填或更正整个岗位分组，使用同一组成员确认范围。"""
+
+    new_position: str = Field(min_length=1, max_length=100)
+
+    @field_validator("new_position")
+    @classmethod
+    def normalize_new_position(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("请填写岗位名称")
+        return value
+
+
 class ApplicationStatusPatch(CamelModel):
     status: Literal[APPLICATION_STATUSES]
 

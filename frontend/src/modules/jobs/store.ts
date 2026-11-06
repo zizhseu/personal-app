@@ -9,6 +9,7 @@ import type {
   RoundPayload,
   RoundCreatePayload,
   PositionDeletePayload,
+  PositionRenamePayload,
   PrimaryPositionPayload,
   PositionStatusPayload,
   ScheduleEvent,
@@ -86,6 +87,11 @@ export const useJobsStore = defineStore('jobs', {
       await api.deletePosition(id, payload)
       ElMessage.success('已删除岗位，公司记录已保留')
       await this.loadAll()
+    },
+    async renamePosition(id: number, payload: PositionRenamePayload) {
+      await api.renamePosition(id, payload)
+      await this.loadAll()
+      ElMessage.success('岗位名称已更新')
     },
     async setPrimaryPosition(id: number, payload: PrimaryPositionPayload) {
       if (this.savingPrimaryIds.includes(id)) return

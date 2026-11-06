@@ -179,6 +179,10 @@ export interface PositionDeletePayload {
   expectedResultHistoryIds: number[]
 }
 
+export interface PositionRenamePayload extends PositionDeletePayload {
+  newPosition: string
+}
+
 /** 自定义日程类型 */
 export type EventType = 'talk' | 'other'
 

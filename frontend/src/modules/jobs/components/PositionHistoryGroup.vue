@@ -16,6 +16,7 @@
       </button>
       </h3>
       <div class="position-controls">
+        <el-button link type="primary" class="edit-position" :disabled="deleting || selectionDisabled" @click="nameVisible = true">{{ group.position ? '编辑岗位' : '补填岗位' }}</el-button>
         <PositionStatusControl :application-id="applicationId" :position="group.position" :position-version="group.positionVersion" :disabled="deleting" />
         <el-button v-if="!group.isPrimary" link type="primary" class="primary-position" :loading="selecting" :disabled="selectionDisabled" @click="emit('selectPrimary')">设为主要</el-button>
         <el-button link type="danger" class="delete-position" :loading="deleting" @click="emit('removePosition')">删除岗位</el-button>
@@ -23,7 +24,7 @@
     </div>
 
     <div v-show="expanded" :id="bodyId" class="position-body">
-      <p v-if="!group.position" class="unknown-position">这些记录未保存岗位名称，可在轮次编辑中补录。</p>
+      <p v-if="!group.position" class="unknown-position">点击标题栏的「补填岗位」，可一次补全本岗位及所属记录的名称。</p>
       <div class="position-panels">
         <section class="rounds-panel" :aria-labelledby="`${bodyId}-rounds`">
           <div class="panel-heading">
@@ -90,6 +91,7 @@
         </section>
       </div>
     </div>
+    <PositionNameDialog v-model="nameVisible" :application-id="applicationId" :group="group" />
   </article>
 </template>
 
@@ -98,6 +100,7 @@ import { computed, ref } from 'vue'
 import { ArrowRight, CaretRight, Close } from '@element-plus/icons-vue'
 import StatusTag from './StatusTag.vue'
 import PositionStatusControl from './PositionStatusControl.vue'
+import PositionNameDialog from './PositionNameDialog.vue'
 import { positionLabel } from '../selectors'
 import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS } from '../constants'
 import { formatDateTime } from '@/shared/utils/format'
@@ -116,6 +119,7 @@ const emit = defineEmits<{
   removeResult: [result: RoundResultChange]
 }>()
 const bodyId = computed(() => `position-process-${props.group.positionVersion}-${encodeURIComponent(props.group.position ?? '')}`)
+const nameVisible = ref(false)
 const expandedRoundHistory = ref(new Set<number>())
 const resultChangesOf = (round: InterviewRound) => props.group.roundResults.get(round.id) ?? []
 const roundTypeLabel = (type: string) => ROUND_TYPE_LABELS[type as RoundType] ?? type
@@ -153,7 +157,7 @@ function roundTimeText(round: InterviewRound): string {
 .position-heading { display: flex; align-items: center; flex-wrap: wrap; }
 .position-title { flex: 1; min-width: 0; margin: 0; font-size: inherit; }
 .position-controls { display: flex; align-items: center; flex-shrink: 0; gap: 12px; padding-right: 16px; }
-.delete-position, .primary-position { flex-shrink: 0; margin: 0; }
+.delete-position, .primary-position, .edit-position { flex-shrink: 0; margin: 0; }
 .position-toggle {
   width: 100%;
   display: flex;

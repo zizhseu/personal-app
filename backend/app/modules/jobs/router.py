@@ -12,6 +12,7 @@ from app.modules.jobs.schemas import (
     EventUpdate,
     OfferDecisionPatch,
     PositionDeleteInput,
+    PositionRenameInput,
     PrimaryPositionInput,
     PositionStatusPatch,
     RoundCreate,
@@ -83,6 +84,11 @@ def set_primary_position(app_id: int, data: PrimaryPositionInput, db: Session = 
 @router.patch("/applications/{app_id}/positions/status")
 def patch_position_status(app_id: int, data: PositionStatusPatch, db: Session = Depends(get_db)):
     return service.patch_position_status(db, app_id, data).to_dict()
+
+
+@router.patch("/applications/{app_id}/positions/name")
+def rename_position(app_id: int, data: PositionRenameInput, db: Session = Depends(get_db)):
+    return service.rename_position(db, app_id, data).to_dict()
 
 
 @router.put("/rounds/{round_id}")
