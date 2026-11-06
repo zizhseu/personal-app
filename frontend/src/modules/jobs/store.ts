@@ -119,11 +119,6 @@ export const useJobsStore = defineStore('jobs', {
       ElMessage.success('已删除该条状态记录')
       await this.loadAll()
     },
-    async updateStatusPosition(historyId: number, position: string | null) {
-      await api.updateStatusPosition(historyId, position)
-      ElMessage.success('已更新该阶段岗位')
-      await this.loadAll()
-    },
     /** 手动删除一条结果变化记录 */
     async removeResultHistory(historyId: number) {
       await api.deleteResultHistory(historyId)

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { currentResult, latestRound, resultBucket } from '../src/modules/jobs/selectors.ts'
-import { groupPositionHistory, groupResultChanges } from '../src/modules/jobs/history.ts'
+import { groupPositionHistory } from '../src/modules/jobs/history.ts'
 
 test('改投后的当前结果不使用旧岗位失败记录，再回到同名岗位也不串用', () => {
   const application = { position: '岗位 A', positionVersion: 3, status: 'screening', rounds: [
@@ -27,40 +27,50 @@ test('同一代旧数据中，另一岗位与未知岗位都不作为当前结�
   assert.equal(currentResult(application), null)
 })
 
-test('旧轮次晚补的结果仍归原阶段，不会落到新岗位的同名状态', () => {
-  const stages = [
-    { id: 1, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-01T10:00:00' },
-    { id: 2, status: 'screening', position: '岗位 B', positionVersion: 2, changedAt: '2026-10-02T10:00:00' },
-  ]
-  const result = { id: 1, statusHistoryId: 1, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-03T10:00:00' }
-  const { groups, unassigned } = groupResultChanges(stages, [result])
-  assert.deepEqual(groups.get(1), [result])
-  assert.equal(groups.has(2), false)
-  assert.deepEqual(unassigned, [])
-})
-
-test('旧结果回退按岗位代次隔离，同一时间用阶段编号稳定归属', () => {
-  const stages = [
-    { id: 1, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-01T10:00:00' },
-    { id: 2, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-01T10:00:00' },
-    { id: 3, status: 'screening', position: '岗位 A', positionVersion: 3, changedAt: '2026-10-02T10:00:00' },
-  ]
-  const result = { id: 1, statusHistoryId: null, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-03T10:00:00' }
-  assert.deepEqual(groupResultChanges(stages, [result]).groups.get(2), [result])
-})
-
-test('无法归属的结果保持可见，不强行放进其他岗位的阶段', () => {
-  const stages = [{ id: 1, status: 'screening', position: '岗位 B', positionVersion: 2, changedAt: '2026-10-01T10:00:00' }]
-  const result = { id: 1, statusHistoryId: null, status: 'screening', position: '岗位 A', positionVersion: 1, changedAt: '2026-10-02T10:00:00' }
-  const grouped = groupResultChanges(stages, [result])
-  assert.equal(grouped.groups.size, 0)
-  assert.deepEqual(grouped.unassigned, [result])
-})
-
 const stage = (id, position, positionVersion, status = 'screening') => ({ id, position, positionVersion, status, changedAt: `2026-10-${String(id).padStart(2, '0')}T10:00:00` })
 const round = (id, position, positionVersion, statusHistoryId = id) => ({ id, position, positionVersion, statusHistoryId, result: 'failed' })
 const result = (id, position, positionVersion, statusHistoryId = id) => ({ id, roundId: id, position, positionVersion, statusHistoryId, status: 'screening', toResult: 'failed', changedAt: '2026-10-20T10:00:00' })
 const application = (values = {}) => ({ position: '岗位 B', positionVersion: 2, status: 'screening', rounds: [], statusHistory: [], resultHistory: [], ...values })
+
+test('岗位只有初筛状态时，测评结果仍归到对应测评轮次，原始状态历史保持原值', () => {
+  const input = application({
+    rounds: [round(1, '岗位 A', 1, null)],
+    statusHistory: [stage(1, '岗位 A', 1)],
+    resultHistory: [{ ...result(3, '岗位 A', 1, null), roundId: 1, status: 'rescreen', toResult: 'completed' }],
+  })
+  const original = structuredClone(input)
+  const group = groupPositionHistory(input).find(row => row.position === '岗位 A')
+  assert.deepEqual(group.roundResults.get(1).map(item => item.id), [3])
+  assert.equal(group.retainedResults.length, 0)
+  assert.deepEqual(group.statusHistory.map(item => item.status), ['screening'])
+  assert.deepEqual(input, original)
+})
+
+test('同一岗位的各轮次分别保存结果变化，并按变化时间和编号稳定展示', () => {
+  const input = application({
+    rounds: [round(1, '岗位 B', 2), round(2, '岗位 B', 2)],
+    resultHistory: [
+      { ...result(3, '岗位 B', 2), roundId: 1, changedAt: '2026-11-06T10:00:00' },
+      { ...result(1, '岗位 B', 2), changedAt: '2026-11-05T10:00:00' },
+      { ...result(2, '岗位 B', 2), changedAt: '2026-11-05T10:00:00' },
+    ],
+  })
+  const group = groupPositionHistory(input)[0]
+  assert.deepEqual(group.roundResults.get(1).map(item => item.id), [1, 3])
+  assert.deepEqual(group.roundResults.get(2).map(item => item.id), [2])
+  assert.equal(group.retainedResults.length, 0)
+  assert.deepEqual([...group.roundResults.values()].flat().map(item => item.id).sort(), [1, 2, 3])
+})
+
+test('结果快照与所属轮次岗位冲突时，历史结果保留在原快照岗位下', () => {
+  const groups = groupPositionHistory(application({
+    rounds: [round(1, '岗位 A', 1)],
+    statusHistory: [stage(1, '岗位 A', 1)],
+    resultHistory: [result(1, '岗位 B', 2)],
+  }))
+  assert.deepEqual(groups.find(row => row.position === '岗位 B').retainedResults.map(item => item.id), [1])
+  assert.equal(groups.find(row => row.position === '岗位 A').roundResults.size, 0)
+})
 
 test('岗位分组将 A → B → A 保留为三次流程，当前岗位优先且各组包含自己的轮次、状态和结果', () => {
   const rows = groupPositionHistory(application({
@@ -73,8 +83,8 @@ test('岗位分组将 A → B → A 保留为三次流程，当前岗位优先�
   for (const row of rows) {
     assert.deepEqual(row.rounds.map(item => item.id), [row.positionVersion])
     assert.deepEqual(row.statusHistory.map(item => item.id), [row.positionVersion])
-    assert.deepEqual(row.resultGroups.get(row.positionVersion).map(item => item.id), [row.positionVersion])
-    assert.equal(row.unassignedResults.length, 0)
+    assert.deepEqual(row.roundResults.get(row.positionVersion).map(item => item.id), [row.positionVersion])
+    assert.equal(row.retainedResults.length, 0)
   }
 })
 
@@ -97,7 +107,7 @@ test('旧版同一流程的空快照归入唯一岗位，不拆成第二组，�
   const rows = groupPositionHistory(input)
   assert.deepEqual(rows.map(row => [row.position, row.isCurrent]), [['岗位 B', true]])
   assert.deepEqual(rows[0].rounds.map(item => item.id), [1])
-  assert.deepEqual(rows[0].resultGroups.get(1).map(item => item.id), [1])
+  assert.deepEqual(rows[0].roundResults.get(1).map(item => item.id), [1])
   assert.equal(currentResult(input), 'failed')
   assert.deepEqual(input, original)
 })
@@ -126,7 +136,7 @@ test('只有结果、没有轮次或阶段的岗位仍有独立分组，结果�
   const rows = groupPositionHistory(application({ resultHistory: [result(1, '岗位 A', 1, null)] }))
   assert.equal(rows.length, 2)
   assert.equal(rows[1].position, '岗位 A')
-  assert.deepEqual(rows[1].unassignedResults.map(item => item.id), [1])
+  assert.deepEqual(rows[1].retainedResults.map(item => item.id), [1])
   assert.equal(rows[1].rounds.length, 0)
   assert.equal(rows[1].statusHistory.length, 0)
 })
@@ -137,17 +147,17 @@ test('缺失名称但有明确阶段关联的轮次和结果在该岗位下展�
   const rows = groupPositionHistory(input)
   assert.deepEqual(rows.map(row => row.position), ['岗位 B', '岗位 A'])
   assert.deepEqual(rows[1].rounds.map(item => item.id), [1])
-  assert.deepEqual(rows[1].resultGroups.get(1).map(item => item.id), [1])
+  assert.deepEqual(rows[1].roundResults.get(1).map(item => item.id), [1])
   assert.deepEqual(input, original)
 })
 
-test('快照与明确阶段关联冲突时不跨岗位挂载，保留为本岗位未归属结果', () => {
+test('快照与明确阶段关联冲突时，结果保留在本岗位历史', () => {
   const rows = groupPositionHistory(application({
     statusHistory: [stage(1, '岗位 A', 1), stage(2, '岗位 B', 2)],
     resultHistory: [result(1, '岗位 B', 2, 1)],
   }))
-  assert.equal(rows[0].resultGroups.size, 0)
-  assert.deepEqual(rows[0].unassignedResults.map(item => item.id), [1])
+  assert.equal(rows[0].roundResults.size, 0)
+  assert.deepEqual(rows[0].retainedResults.map(item => item.id), [1])
   assert.equal(rows[1].resultHistory.length, 0)
 })
 
@@ -169,7 +179,7 @@ test('结果缺失名称且阶段关联冲突时，仍随明确所属轮次留�
   }))
   assert.equal(rows[0].position, '岗位 B')
   assert.equal(rows[0].resultHistory.length, 0)
-  assert.deepEqual(rows[1].unassignedResults.map(item => item.id), [1])
+  assert.deepEqual(rows[1].roundResults.get(1).map(item => item.id), [1])
 })
 
 test('删除当前岗位后只展示保留的历史，不生成空的未知当前岗位', () => {

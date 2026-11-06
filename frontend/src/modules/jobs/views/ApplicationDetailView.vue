@@ -96,7 +96,6 @@
           @select-primary="selectPrimaryPosition(group)"
           @edit-round="openEditRound"
           @remove-round="confirmRemoveRound"
-          @edit-stage="editStagePosition"
           @remove-stage="removeStatusRow"
           @remove-result="removeResultRow"
         />
@@ -201,14 +200,6 @@ function openEditRound(round: InterviewRound) {
   roundTarget.value = null
   editingRound.value = round
   roundVisible.value = true
-}
-
-async function editStagePosition(stage: StatusHistory) {
-  const position = await ElMessageBox.prompt('填写该阶段当时的岗位。会同步此阶段关联的轮次与结果记录，当前岗位保持不变。', '补录 / 更正历史岗位', {
-    inputValue: stage.position ?? '', inputValidator: value => value.trim().length <= 100 || '岗位名称不能超过 100 字',
-    confirmButtonText: '保存', cancelButtonText: '取消',
-  }).then(result => result.value.trim() || null).catch(() => undefined)
-  if (position !== undefined) await store.updateStatusPosition(stage.id, position)
 }
 
 async function removeStatusRow(stage: StatusHistory) {

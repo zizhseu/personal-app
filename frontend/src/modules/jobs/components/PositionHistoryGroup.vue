@@ -23,7 +23,7 @@
     </div>
 
     <div v-show="expanded" :id="bodyId" class="position-body">
-      <p v-if="!group.position" class="unknown-position">这些记录未保存岗位名称，可在轮次或状态变化中补录。</p>
+      <p v-if="!group.position" class="unknown-position">这些记录未保存岗位名称，可在轮次编辑中补录。</p>
       <div class="position-panels">
         <section class="rounds-panel" :aria-labelledby="`${bodyId}-rounds`">
           <div class="panel-heading">
@@ -43,10 +43,33 @@
                 </div>
                 <p v-if="round.resultChangedAt" class="round-result-time">结果更新于 {{ formatDateTime(round.resultChangedAt) }}</p>
                 <p class="round-note" :class="{ empty: !round.reviewNote }">{{ round.reviewNote || '暂无复盘笔记' }}</p>
+                <div v-if="resultChangesOf(round).length" class="round-result-history">
+                  <button class="history-toggle" :aria-expanded="expandedRoundHistory.has(round.id)" :aria-controls="`${bodyId}-round-${round.id}-results`" @click="toggleRoundHistory(round.id)">
+                    <el-icon class="history-caret" :class="{ open: expandedRoundHistory.has(round.id) }"><CaretRight /></el-icon>
+                    <span>结果变化 <span class="change-count">（{{ resultChangesOf(round).length }}）</span></span>
+                  </button>
+                  <div v-if="expandedRoundHistory.has(round.id)" :id="`${bodyId}-round-${round.id}-results`" class="result-changes">
+                    <div v-for="result in resultChangesOf(round)" :key="result.id" class="result-change-row" :data-result-id="result.id">
+                      <span v-if="result.fromResult" class="rc-from">{{ RESULT_LABELS[result.fromResult] }} →</span>
+                      <el-tag size="small" effect="dark" disable-transitions class="result-tag" :color="RESULT_COLORS[result.toResult]">{{ RESULT_LABELS[result.toResult] }}</el-tag>
+                      <time class="rc-time">{{ formatDateTime(result.changedAt) }}</time>
+                      <el-button link class="row-remove" :icon="Close" aria-label="删除此条结果记录" title="删除此条结果记录" @click="emit('removeResult', result)" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </el-timeline-item>
           </el-timeline>
           <p v-else class="empty-panel">{{ group.isCurrent ? '该岗位还没有流程轮次，可点击「添加轮次」记录。' : '该岗位没有流程轮次记录。' }}</p>
+          <div v-if="group.retainedResults.length" class="retained-results">
+            <p class="retained-title">历史结果</p>
+            <div v-for="result in group.retainedResults" :key="result.id" class="result-change-row" :data-result-id="result.id">
+              <span class="rc-round">{{ roundTypeLabel(result.roundType) }}</span>
+              <el-tag size="small" effect="dark" class="result-tag" :color="RESULT_COLORS[result.toResult]">{{ RESULT_LABELS[result.toResult] }}</el-tag>
+              <time class="rc-time">{{ formatDateTime(result.changedAt) }}</time>
+              <el-button link class="row-remove" :icon="Close" aria-label="删除此条结果记录" title="删除此条结果记录" @click="emit('removeResult', result)" />
+            </div>
+          </div>
         </section>
 
         <section class="history-panel" :aria-labelledby="`${bodyId}-history`">
@@ -57,34 +80,12 @@
           <div class="history-list">
             <div v-for="stage in group.statusHistory" :key="stage.id" class="history-group" :data-stage-id="stage.id">
               <div class="history-row">
-                <button class="history-toggle" :disabled="!resultChangesOf(stage).length" :aria-expanded="resultChangesOf(stage).length ? expandedHistory.has(stage.id) : undefined" :aria-controls="resultChangesOf(stage).length ? `${bodyId}-stage-${stage.id}` : undefined" @click="toggleHistory(stage.id)">
-                  <el-icon class="history-caret" :class="{ open: expandedHistory.has(stage.id), invisible: !resultChangesOf(stage).length }"><CaretRight /></el-icon>
-                  <StatusTag :status="stage.status" />
-                  <span v-if="resultChangesOf(stage).length" class="change-count">{{ resultChangesOf(stage).length }}</span>
-                </button>
-                <el-button link size="small" class="stage-position" :title="`补录或更正该阶段岗位：${positionLabel(stage.position)}`" @click="emit('editStage', stage)">{{ stage.position ? '更正岗位' : '补录岗位' }}</el-button>
+                <StatusTag :status="stage.status" />
                 <time class="history-time">{{ formatDateTime(stage.changedAt) }}</time>
                 <el-button link class="row-remove" :icon="Close" aria-label="删除此条状态记录" title="删除此条状态记录" @click="emit('removeStage', stage)" />
               </div>
-              <div v-if="expandedHistory.has(stage.id)" :id="`${bodyId}-stage-${stage.id}`" class="result-changes">
-                <div v-for="result in resultChangesOf(stage)" :key="result.id" class="result-change-row" :data-result-id="result.id">
-                  <span class="rc-round">{{ roundTypeLabel(result.roundType) }}</span>
-                  <el-tag size="small" effect="dark" disable-transitions class="result-tag" :color="RESULT_COLORS[result.toResult]">{{ RESULT_LABELS[result.toResult] }}</el-tag>
-                  <time class="rc-time">{{ formatShortDateTime(result.changedAt) }}</time>
-                  <el-button link class="row-remove" :icon="Close" aria-label="删除此条结果记录" title="删除此条结果记录" @click="emit('removeResult', result)" />
-                </div>
-              </div>
             </div>
             <p v-if="!group.statusHistory.length" class="empty-panel">该岗位没有状态变化记录。</p>
-            <div v-if="group.unassignedResults.length" class="unassigned-results">
-              <p class="unassigned-title">未归属阶段的结果记录</p>
-              <div v-for="result in group.unassignedResults" :key="result.id" class="result-change-row" :data-result-id="result.id">
-                <span class="rc-round">{{ roundTypeLabel(result.roundType) }}</span>
-                <el-tag size="small" effect="dark" class="result-tag" :color="RESULT_COLORS[result.toResult]">{{ RESULT_LABELS[result.toResult] }}</el-tag>
-                <time class="rc-time">{{ formatShortDateTime(result.changedAt) }}</time>
-                <el-button link class="row-remove" :icon="Close" aria-label="删除此条结果记录" title="删除此条结果记录" @click="emit('removeResult', result)" />
-              </div>
-            </div>
           </div>
         </section>
       </div>
@@ -95,7 +96,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ArrowRight, CaretRight, Close } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
 import StatusTag from './StatusTag.vue'
 import PositionStatusControl from './PositionStatusControl.vue'
 import { positionLabel } from '../selectors'
@@ -112,21 +112,19 @@ const emit = defineEmits<{
   selectPrimary: []
   editRound: [round: InterviewRound]
   removeRound: [round: InterviewRound]
-  editStage: [stage: StatusHistory]
   removeStage: [stage: StatusHistory]
   removeResult: [result: RoundResultChange]
 }>()
 const bodyId = computed(() => `position-process-${props.group.positionVersion}-${encodeURIComponent(props.group.position ?? '')}`)
-const expandedHistory = ref(new Set<number>())
-const resultChangesOf = (stage: StatusHistory) => props.group.resultGroups.get(stage.id) ?? []
+const expandedRoundHistory = ref(new Set<number>())
+const resultChangesOf = (round: InterviewRound) => props.group.roundResults.get(round.id) ?? []
 const roundTypeLabel = (type: string) => ROUND_TYPE_LABELS[type as RoundType] ?? type
-const formatShortDateTime = (value: string) => dayjs(value).format('MM-DD HH:mm')
 
-function toggleHistory(id: number) {
-  const next = new Set(expandedHistory.value)
+function toggleRoundHistory(id: number) {
+  const next = new Set(expandedRoundHistory.value)
   if (next.has(id)) next.delete(id)
   else next.add(id)
-  expandedHistory.value = next
+  expandedRoundHistory.value = next
 }
 
 function timelineType(result: InterviewRound['result']): 'primary' | 'success' | 'danger' {
@@ -198,21 +196,20 @@ function roundTimeText(round: InterviewRound): string {
 .history-group + .history-group { border-top: 1px solid var(--el-border-color-lighter); }
 .history-row { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
 .history-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 3px 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
-.history-toggle:disabled { cursor: default; }
 .history-caret { color: var(--ink-3); font-size: 12px; transition: transform 0.15s ease; }
 .history-caret.open { transform: rotate(90deg); }
-.invisible { visibility: hidden; }
 .change-count { color: var(--ink-3); font-size: 12px; }
-.stage-position { color: var(--ink-3); }
 .history-time { margin-left: auto; color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row-remove { flex-shrink: 0; margin-left: 0; color: var(--ink-3); }
 .row-remove:hover { color: var(--el-color-danger); }
 .result-changes { display: flex; flex-direction: column; gap: 4px; margin-left: 6px; padding: 0 0 10px 12px; border-left: 2px solid var(--el-border-color-lighter); }
+.round-result-history { margin-top: 8px; font-size: 12px; }
+.rc-from { color: var(--ink-3); }
 .result-change-row { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
 .rc-round { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
 .rc-time { margin-left: auto; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.unassigned-results { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--el-border-color-light); }
-.unassigned-title { margin: 0 0 6px; color: var(--ink-3); font-size: 12px; }
+.retained-results { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--el-border-color-light); }
+.retained-title { margin: 0 0 6px; color: var(--ink-3); font-size: 12px; }
 @media (max-width: 1100px) {
   .position-panels { grid-template-columns: minmax(0, 1fr); }
   .history-panel { border-left: 0; border-top: 1px solid var(--el-border-color-lighter); }

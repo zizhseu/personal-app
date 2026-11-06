@@ -79,10 +79,6 @@ export function deleteStatusHistory(historyId: number): Promise<void> {
   return request.delete(`/jobs/status-history/${historyId}`) as Promise<void>
 }
 
-export function updateStatusPosition(historyId: number, position: string | null): Promise<Application['statusHistory'][number]> {
-  return request.patch(`/jobs/status-history/${historyId}/position`, { position }) as Promise<Application['statusHistory'][number]>
-}
-
 export function deleteResultHistory(historyId: number): Promise<void> {
   return request.delete(`/jobs/result-history/${historyId}`) as Promise<void>
 }
