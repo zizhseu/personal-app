@@ -10,6 +10,7 @@ import type {
   RoundCreatePayload,
   PositionDeletePayload,
   PrimaryPositionPayload,
+  PositionStatusPayload,
   ScheduleEvent,
 } from './types'
 import * as api from './api'
@@ -22,6 +23,7 @@ export const useJobsStore = defineStore('jobs', {
     loaded: false,
     loading: false,
     savingPrimaryIds: [] as number[],
+    savingPositionStatusKeys: [] as string[],
   }),
   actions: {
     async loadAll() {
@@ -57,6 +59,18 @@ export const useJobsStore = defineStore('jobs', {
       await api.patchStatus(id, status)
       ElMessage.success('状态已更新')
       await this.loadAll()
+    },
+    async setPositionStatus(id: number, payload: PositionStatusPayload) {
+      const key = JSON.stringify([id, payload.positionVersion, payload.position])
+      if (this.savingPositionStatusKeys.includes(key)) return
+      this.savingPositionStatusKeys.push(key)
+      try {
+        await api.patchPositionStatus(id, payload)
+        await this.loadAll()
+        ElMessage.success('该岗位状态已更新')
+      } finally {
+        this.savingPositionStatusKeys = this.savingPositionStatusKeys.filter(value => value !== key)
+      }
     },
     async setOfferDecision(id: number, decision: 'accepted' | 'rejected_offer') {
       await api.patchOfferDecision(id, decision)

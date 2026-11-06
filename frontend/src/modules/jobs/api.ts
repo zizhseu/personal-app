@@ -1,5 +1,5 @@
 import request from '@/shared/api/request'
-import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload, PositionDeletePayload, PrimaryPositionPayload } from './types'
+import type { Application, ApplicationPayload, ApplicationUpdatePayload, RoundPayload, RoundCreatePayload, ScheduleEvent, EventPayload, PositionDeletePayload, PrimaryPositionPayload, PositionStatusPayload } from './types'
 
 /** jobs 模块全部接口调用 */
 
@@ -24,6 +24,10 @@ export function updateApplication(
 
 export function patchStatus(id: number, status: Application['status']): Promise<Application> {
   return request.patch(`/jobs/applications/${id}/status`, { status }) as Promise<Application>
+}
+
+export function patchPositionStatus(id: number, payload: PositionStatusPayload): Promise<Application> {
+  return request.patch(`/jobs/applications/${id}/positions/status`, payload) as Promise<Application>
 }
 
 export function patchOfferDecision(

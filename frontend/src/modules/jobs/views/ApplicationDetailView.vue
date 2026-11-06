@@ -76,7 +76,7 @@
       <div class="section-heading">
         <div>
           <h2 id="position-history-title">岗位历程</h2>
-          <p>按岗位查看流程轮次、状态变化与复盘；主要岗位用于列表展示</p>
+          <p>点击各岗位的状态可独立修改；主要岗位用于列表展示</p>
         </div>
         <el-button v-if="positionGroups.length > 1" link type="primary" @click="toggleAllPositions">{{ allPositionsExpanded ? '仅展开当前' : '展开全部' }}</el-button>
       </div>
@@ -84,6 +84,7 @@
         <PositionHistoryGroup
           v-for="group in positionGroups"
           :key="`${app.id}:${group.key}`"
+          :application-id="app.id"
           :group="group"
           :expanded="expandedPositions.has(group.key)"
           :deleting="deletingPositionKey === group.key"

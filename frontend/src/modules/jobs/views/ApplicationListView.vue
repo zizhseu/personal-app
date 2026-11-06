@@ -113,26 +113,8 @@
         filter-placement="bottom-end"
       >
         <template #default="{ row }">
-          <el-dropdown v-if="hasCurrentPosition(row) && row.displayStatusRecorded && row.displayIsCurrent" trigger="click" @command="(s: ApplicationStatus) => store.quickSetStatus(row.id, s)">
-            <span class="status-trigger" @click.stop>
-              <StatusTag :status="row.status" />
-              <el-icon class="caret"><CaretBottom /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item
-                  v-for="s in STATUS_ORDER"
-                  :key="s"
-                  :command="s"
-                  :disabled="s === row.status"
-                >
-                  {{ STATUS_LABELS[s] }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <StatusTag v-else-if="hasCurrentPosition(row) && row.displayStatusRecorded" :status="row.status" title="历史岗位状态来自已保存的流程" />
-          <span v-else class="base-empty">{{ hasCurrentPosition(row) ? '状态未记录' : '暂无主要岗位' }}</span>
+          <PositionStatusControl v-if="hasCurrentPosition(row)" :application-id="row.id" :position="row.position" :position-version="row.positionVersion" />
+          <span v-else class="base-empty">暂无主要岗位</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -214,7 +196,7 @@
 import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue'
 import { ElMessageBox, type TableInstance } from 'element-plus'
 import dayjs from 'dayjs'
-import StatusTag from '../components/StatusTag.vue'
+import PositionStatusControl from '../components/PositionStatusControl.vue'
 import ApplicationFormDialog from '../components/ApplicationFormDialog.vue'
 import PrimaryPositionSelect from '../components/PrimaryPositionSelect.vue'
 import { STATUS_LABELS, STATUS_ORDER, BASE_OPTIONS, RESULT_LABELS, RESULT_COLORS, NORMAL_RESULT_OPTIONS, OFFER_RESULT_OPTIONS } from '../constants'

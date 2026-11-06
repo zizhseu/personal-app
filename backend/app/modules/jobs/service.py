@@ -22,11 +22,12 @@ from app.modules.jobs.schemas import (
     OfferDecisionPatch,
     PositionDeleteInput,
     PrimaryPositionInput,
+    PositionStatusPatch,
     RoundCreate,
     RoundUpdate,
     StatusHistoryPositionInput,
 )
-from app.modules.jobs.positions import PositionResolver, position_groups, recorded_position
+from app.modules.jobs.positions import PositionResolver, position_groups, position_summaries, recorded_position
 
 
 def list_applications(
@@ -74,8 +75,11 @@ def _new_stage(db: Session, row: Application, status: str, when: datetime) -> St
 
 
 def _current_stage(db: Session, row: Application, when: datetime) -> StatusHistory:
-    latest = max(row.status_history, key=lambda h: (h.changed_at, h.id), default=None)
-    if latest and latest.status == row.status and latest.position_version == row.position_version and PositionResolver(row).stage_position(latest) == recorded_position(row.position):
+    resolver = PositionResolver(row)
+    candidates = [h for h in row.status_history if h.position_version == row.position_version
+                  and resolver.stage_position(h) == recorded_position(row.position)]
+    latest = max(candidates, key=lambda h: (h.changed_at, h.id), default=None)
+    if latest and latest.status == row.status:
         return latest
     return _new_stage(db, row, row.status, when)
 
@@ -108,9 +112,10 @@ def _record_result(db: Session, round_row: InterviewRound, stage: StatusHistory 
 
 
 def _sync_rounds_on_status_change(
-    db: Session, row: Application, old_status: str, new_status: str, stage: StatusHistory, when: datetime
+    db: Session, row: Application, old_status: str | None, new_status: str, stage: StatusHistory, when: datetime,
+    rounds: list[InterviewRound] | None = None,
 ) -> None:
-    """状态正向推进时，把当前最新轮次置为「通过」（进入了下一环节 = 上一环节通过）。
+    """状态正向推进时，只把所选岗位最新轮次置为「通过」。
     边界：倒退/平移不联动；「未通过」是用户录入的事实不覆盖；无轮次静默跳过。
     下一环节的新轮次默认「未开始」（前后端默认值），无需在此处理。
     """
@@ -118,9 +123,9 @@ def _sync_rounds_on_status_change(
         return
     if STATUS_FLOW.index(new_status) <= STATUS_FLOW.index(old_status):
         return
-    current_rounds = [r for r in row.rounds if _current_round(r, row)]
-    if current_rounds:
-        latest = max(current_rounds, key=lambda r: r.id)
+    scoped_rounds = rounds if rounds is not None else [r for r in row.rounds if _current_round(r, row)]
+    if scoped_rounds:
+        latest = max(scoped_rounds, key=lambda r: r.id)
         if latest.result in ("not_started", "completed", "not_attended"):
             old = latest.result
             latest.result = "passed"
@@ -195,6 +200,51 @@ def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Appl
         db.commit()
         db.refresh(row)
     return row
+
+
+def patch_position_status(db: Session, app_id: int, data: PositionStatusPatch) -> Application:
+    """每个岗位独立追加状态，主要岗位选择不参与写入目标判断。"""
+    get_application(db, app_id)
+    try:
+        # 先锁定父记录再读取分组，避免旧页面与并发更换/删除岗位交错写入。
+        locked = db.execute(
+            update(Application)
+            .where(Application.id == app_id, Application.position_version == data.expected_position_version)
+            .values(updated_at=Application.updated_at)
+        )
+        if locked.rowcount != 1:
+            raise HTTPException(409, "岗位记录已变更，请刷新后重试")
+        db.expire_all()
+        row = get_application(db, app_id)
+        key = (data.position_version, recorded_position(data.position))
+        group = position_groups(row).get(key)
+        if group is None:
+            raise HTTPException(409, "所选岗位已变更或删除，请刷新后重试")
+        summary = next(
+            item for item in position_summaries(row)
+            if (item['positionVersion'], item['position']) == key
+        )
+        latest_stage = max(group.stages, key=lambda item: (item.changed_at, item.id), default=None)
+        # 同值重试不重复追加历史；不同值必须核对旧状态，拒绝覆盖较新的操作。
+        if summary['status'] != data.status:
+            if (summary['status'] != data.expected_status
+                    or (latest_stage.id if latest_stage else None) != data.expected_status_history_id):
+                raise HTTPException(409, "该岗位状态已更新，请刷新后重新选择")
+            when = datetime.now()
+            stage = StatusHistory(
+                status=data.status, changed_at=when, position=key[1], position_version=key[0],
+            )
+            row.status_history.append(stage)
+            if summary['isCurrent']:
+                row.status = data.status
+            db.flush()
+            _sync_rounds_on_status_change(db, row, summary['status'], data.status, stage, when, rounds=group.rounds)
+        db.commit()
+        db.expire_all()
+        return get_application(db, app_id)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def patch_offer_decision(

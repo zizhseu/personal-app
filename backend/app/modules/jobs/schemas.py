@@ -75,6 +75,14 @@ class ApplicationStatusPatch(CamelModel):
     status: Literal[APPLICATION_STATUSES]
 
 
+class PositionStatusPatch(PrimaryPositionInput):
+    """按岗位修改状态，携带看到的旧状态和该岗位最后一条状态记录。"""
+    status: Literal[APPLICATION_STATUSES]
+    # 旧状态可能是 rejected 等历史枚举，仍可作为并发校验依据。
+    expected_status: str | None = Field(max_length=20)
+    expected_status_history_id: PositiveInt | None = Field()
+
+
 class OfferDecisionPatch(CamelModel):
     """Offer 决定（仅状态为 Offer 时可设置）。"""
 

@@ -13,6 +13,7 @@ from app.modules.jobs.schemas import (
     OfferDecisionPatch,
     PositionDeleteInput,
     PrimaryPositionInput,
+    PositionStatusPatch,
     RoundCreate,
     RoundUpdate,
     StatusHistoryPositionInput,
@@ -77,6 +78,11 @@ def delete_position(app_id: int, data: PositionDeleteInput, db: Session = Depend
 @router.put("/applications/{app_id}/primary-position")
 def set_primary_position(app_id: int, data: PrimaryPositionInput, db: Session = Depends(get_db)):
     return service.set_primary_position(db, app_id, data).to_dict()
+
+
+@router.patch("/applications/{app_id}/positions/status")
+def patch_position_status(app_id: int, data: PositionStatusPatch, db: Session = Depends(get_db)):
+    return service.patch_position_status(db, app_id, data).to_dict()
 
 
 @router.put("/rounds/{round_id}")

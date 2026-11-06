@@ -11,13 +11,15 @@
           <span class="process-label">岗位记录 {{ group.displayOrder }}</span>
         </span>
         <span class="position-summary">
-          <StatusTag v-if="group.status" :status="group.status" />
           <span>{{ group.rounds.length }} 个轮次 · {{ group.statusHistory.length }} 次状态变化</span>
         </span>
       </button>
       </h3>
-      <el-button v-if="!group.isPrimary" link type="primary" class="primary-position" :loading="selecting" :disabled="selectionDisabled" @click="emit('selectPrimary')">设为主要</el-button>
-      <el-button link type="danger" class="delete-position" :loading="deleting" @click="emit('removePosition')">删除岗位</el-button>
+      <div class="position-controls">
+        <PositionStatusControl :application-id="applicationId" :position="group.position" :position-version="group.positionVersion" :disabled="deleting" />
+        <el-button v-if="!group.isPrimary" link type="primary" class="primary-position" :loading="selecting" :disabled="selectionDisabled" @click="emit('selectPrimary')">设为主要</el-button>
+        <el-button link type="danger" class="delete-position" :loading="deleting" @click="emit('removePosition')">删除岗位</el-button>
+      </div>
     </div>
 
     <div v-show="expanded" :id="bodyId" class="position-body">
@@ -95,13 +97,14 @@ import { computed, ref } from 'vue'
 import { ArrowRight, CaretRight, Close } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import StatusTag from './StatusTag.vue'
+import PositionStatusControl from './PositionStatusControl.vue'
 import { positionLabel } from '../selectors'
 import { ROUND_TYPE_LABELS, RESULT_LABELS, RESULT_COLORS } from '../constants'
 import { formatDateTime } from '@/shared/utils/format'
 import type { PositionHistoryGroup } from '../history'
 import type { InterviewRound, RoundResultChange, RoundType, StatusHistory } from '../types'
 
-const props = defineProps<{ group: PositionHistoryGroup; expanded: boolean; deleting?: boolean; selecting?: boolean; selectionDisabled?: boolean }>()
+const props = defineProps<{ applicationId: number; group: PositionHistoryGroup; expanded: boolean; deleting?: boolean; selecting?: boolean; selectionDisabled?: boolean }>()
 const emit = defineEmits<{
   toggle: []
   addRound: []
@@ -149,10 +152,10 @@ function roundTimeText(round: InterviewRound): string {
   overflow: hidden;
 }
 .position-group.current { border-left-color: var(--el-color-primary); }
-.position-heading { display: flex; align-items: center; }
+.position-heading { display: flex; align-items: center; flex-wrap: wrap; }
 .position-title { flex: 1; min-width: 0; margin: 0; font-size: inherit; }
-.delete-position { flex-shrink: 0; margin: 0 16px 0 0; }
-.primary-position { flex-shrink: 0; margin: 0 12px 0 0; }
+.position-controls { display: flex; align-items: center; flex-shrink: 0; gap: 12px; padding-right: 16px; }
+.delete-position, .primary-position { flex-shrink: 0; margin: 0; }
 .position-toggle {
   width: 100%;
   display: flex;
@@ -215,6 +218,8 @@ function roundTimeText(round: InterviewRound): string {
   .history-panel { border-left: 0; border-top: 1px solid var(--el-border-color-lighter); }
 }
 @media (max-width: 700px) {
+  .position-title { flex-basis: 100%; }
+  .position-controls { flex-wrap: wrap; padding: 0 14px 12px; }
   .position-toggle { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px; }
   .position-summary { margin-left: 21px; gap: 10px; }
   .rounds-panel, .history-panel { padding: 16px 14px; }

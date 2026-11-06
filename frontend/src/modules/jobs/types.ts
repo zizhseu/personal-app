@@ -124,6 +124,12 @@ export interface PrimaryPositionPayload {
   expectedPositionVersion: number
 }
 
+export interface PositionStatusPayload extends PrimaryPositionPayload {
+  status: ApplicationStatus
+  expectedStatus: string | null
+  expectedStatusHistoryId: number | null
+}
+
 /** 新增/编辑投递表单（applyDate 传 YYYY-MM-DD 字符串） */
 export interface ApplicationPayload {
   company: string
