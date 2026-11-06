@@ -18,7 +18,13 @@
           :class="[{ expired: danger }, urgencyClass(item)]"
           @click="emit('open', item)"
         >
-          <span class="time num" :class="{ 'time-danger': danger }">{{ item.time }}</span>
+          <span
+            class="time num"
+            :class="{ 'time-danger': danger }"
+            :title="item.startAt ? dayjs(item.startAt).format('YYYY-MM-DD HH:mm') : item.time"
+          >
+            {{ item.startAt ? '开始 ' : '' }}{{ item.time }}
+          </span>
           <el-tag effect="plain" size="small" :type="item.kind === 'event' ? 'warning' : 'primary'">
             {{ item.typeLabel }}
           </el-tag>
@@ -66,9 +72,10 @@ const props = defineProps<{
   title: string
   emptyText: string
   items: ScheduleItem[]
+  now: number
   /** 过期容器：警示样式 */
   danger?: boolean
-  /** 待办容器：按截止紧急度变色（红/黄/绿） */
+  /** 待办容器按距离开始时间的紧急程度变色。 */
   colored?: boolean
 }>()
 
@@ -87,10 +94,10 @@ const paged = computed(() =>
   props.items.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
 )
 
-/** 待办紧急度：<24h 红 / <48h 黄 / 其他绿 */
+/** 待办紧急度使用开始时间，缺少开始时间时由文字提示补充。 */
 function urgencyClass(item: ScheduleItem): string {
-  if (!props.colored) return ''
-  const hours = dayjs(item.scheduledAt).diff(dayjs(), 'hour', true)
+  if (!props.colored || !item.startAt) return ''
+  const hours = dayjs(item.startAt).diff(dayjs(props.now), 'hour', true)
   if (hours <= 24) return 'urgent'
   if (hours <= 48) return 'soon'
   return 'safe'
@@ -204,6 +211,7 @@ function relAppName(item: ScheduleItem): string | null {
 }
 
 .time {
+  flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -214,6 +222,8 @@ function relAppName(item: ScheduleItem): string | null {
 }
 
 .title {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #374151;
 }
 
@@ -238,5 +248,9 @@ function relAppName(item: ScheduleItem): string | null {
   display: flex;
   justify-content: flex-end;
   padding-top: 10px;
+}
+
+@media (max-width: 700px) {
+  .item-card { flex-wrap: wrap; }
 }
 </style>

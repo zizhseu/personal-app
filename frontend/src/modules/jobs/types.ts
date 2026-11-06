@@ -209,11 +209,11 @@ export interface EventPayload {
 export interface ScheduleItem {
   key: string
   kind: 'round' | 'event'
-  /** 展示/排序时间（轮次=截止时间，日程=开始时间） */
-  scheduledAt: string
-  /** 已完成的轮次：实际完成时间（= 结果最后一次修改时间），无则为 null */
-  doneAt: string | null
-  /** MM-DD HH:mm */
+  /** 开始时间用于日程显示、排序和紧急程度。 */
+  startAt: string | null
+  /** 截止时间用于判断可操作期限。 */
+  deadlineAt: string | null
+  /** MM-DD HH:mm，开始时间缺失时明确提示补充。 */
   time: string
   typeLabel: string
   title: string
