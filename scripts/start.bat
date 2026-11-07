@@ -15,7 +15,7 @@ if not exist "%PY%" (
     exit /b 1
 )
 
-echo 启动后端 FastAPI（端口 8000）与前端 Vite（端口 5173）...
+echo 启动后端 FastAPI（端口 8000）与前端 Vite（端口 5175）...
 
 where wt >nul 2>nul
 if %errorlevel%==0 (
@@ -29,7 +29,7 @@ if %errorlevel%==0 (
 
 echo 3 秒后自动打开浏览器...
 timeout /t 3 >nul
-start http://localhost:5173
+start http://localhost:5175
 
 rem 本窗口自动关闭；停止服务请在服务窗口按 Ctrl+C 或直接关闭窗口
 exit /b 0
