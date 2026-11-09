@@ -393,7 +393,7 @@ def _deadline(
     return start_at + timedelta(minutes=duration_minutes or 0)
 
 
-def _check_round_type_status(round_type: str, app_status: str) -> None:
+def _check_round_type_status(round_type: str, app_status: str | None) -> None:
     """硬约束：轮次类型必须与投递状态匹配（如面试轮次需状态为「面试中」）。"""
     required = ROUND_TYPE_STATUS.get(round_type)
     if required and app_status != required:
@@ -420,8 +420,12 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
         _check_round_type_status(data.round_type, app_row.status)
         stage = _current_stage(db, app_row, when)
     else:
-        if (version, recorded_position(position)) not in position_groups(app_row):
+        target = next((item for item in position_summaries(app_row)
+                       if (item['positionVersion'], item['position']) == (version, recorded_position(position))), None)
+        if target is None:
             raise HTTPException(409, "该岗位流程已变更或删除，请刷新后重试")
+        if target['status'] == 'offer' or ROUND_TYPE_STATUS[data.round_type] == 'offer':
+            _check_round_type_status(data.round_type, target['status'])
         # 历史补录不受当前岗位状态限制，只关联该岗位内与轮次类型匹配的阶段。
         resolver = PositionResolver(app_row)
         candidates = [h for h in app_row.status_history if h.position_version == version

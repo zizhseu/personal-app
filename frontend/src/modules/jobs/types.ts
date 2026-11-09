@@ -16,6 +16,9 @@ export type RoundType =
   | 'third'
   | 'hr'
   | 'final'
+  | 'verbal_offer'
+  | 'formal_offer'
+  | 'tripartite'
   | 'other'
 
 /** 轮次结果（accepted / rejected_offer 仅状态为 Offer 时使用） */

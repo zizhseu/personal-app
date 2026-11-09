@@ -15,7 +15,7 @@
         <el-select v-model="form.roundType" style="width: 100%">
           <el-option v-for="t in allowedTypes" :key="t" :label="ROUND_TYPE_LABELS[t]" :value="t" />
         </el-select>
-        <div class="type-hint">{{ isHistoricalCreate ? '补录至所选岗位的历史流程，可选择实际轮次类型；当前岗位和状态不会改变。' : '轮次需与当前状态匹配：测评/笔试/面试轮次要先把状态改到对应阶段' }}</div>
+        <div class="type-hint">{{ effectiveStatus === 'offer' ? 'Offer 阶段可记录口头 Offer、正式 Offer和三方。' : isHistoricalCreate ? '补录至所选岗位的历史流程，可选择实际轮次类型；当前岗位和状态不会改变。' : '轮次需与当前状态匹配：测评/笔试/面试轮次要先把状态改到对应阶段' }}</div>
       </el-form-item>
       <el-form-item label="开始时间" prop="startAt">
         <el-date-picker
@@ -68,14 +68,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import type { InterviewRound, RoundPayload, RoundResult, RoundTarget, RoundType } from '../types'
+import type { InterviewRound, RoundPayload, RoundTarget } from '../types'
 import {
   ROUND_TYPE_LABELS,
   RESULT_LABELS,
   ROUND_TYPE_STATUS,
-  NORMAL_RESULT_OPTIONS,
-  OFFER_RESULT_OPTIONS,
 } from '../constants'
+import { roundResultOptions, roundTypeOptions } from '../roundOptions'
 import { useJobsStore } from '../store'
 import { isCurrentRound, positionLabel } from '../selectors'
 
@@ -98,34 +97,17 @@ const expectedPositionVersion = ref<number>()
 
 const app = computed(() => store.applications.find((a) => a.id === props.applicationId))
 const effectiveStatus = computed(() => {
+  if (isHistoricalCreate.value) return props.target?.status
   if (props.round && app.value && !isCurrentRound(props.round, app.value)) {
     return app.value.statusHistory.find(row => row.id === props.round?.statusHistoryId)?.status ?? ROUND_TYPE_STATUS[props.round.roundType] ?? app.value.status
   }
   return app.value?.status
 })
 
-/** 当前状态下允许的轮次类型（硬约束：轮次需与状态匹配；「其他」不限） */
-const allowedTypes = computed<RoundType[]>(() => {
-  const all = Object.keys(ROUND_TYPE_LABELS) as RoundType[]
-  if (isHistoricalCreate.value) return all.sort((left, right) =>
-    Number(ROUND_TYPE_STATUS[right] === props.target?.status) - Number(ROUND_TYPE_STATUS[left] === props.target?.status))
-  const allowed = all.filter((t) => {
-    const required = ROUND_TYPE_STATUS[t]
-    return required === null || required === effectiveStatus.value
-  })
-  // 编辑时保留原类型可选（用户可能后来改过状态）
-  const cur = props.round?.roundType
-  if (cur && !allowed.includes(cur)) allowed.push(cur)
-  return allowed
-})
+const allowedTypes = computed(() =>
+  roundTypeOptions(effectiveStatus.value, isHistoricalCreate.value, props.round?.roundType))
 
-/** 当前状态下可选的结果（Offer 态仅接受 / 拒绝；编辑时保留原结果可见） */
-const resultOptions = computed<RoundResult[]>(() => {
-  const opts = [...(!isHistoricalCreate.value && effectiveStatus.value === 'offer' ? OFFER_RESULT_OPTIONS : NORMAL_RESULT_OPTIONS)]
-  const cur = props.round?.result
-  if (cur && !opts.includes(cur)) opts.push(cur)
-  return opts
-})
+const resultOptions = computed(() => roundResultOptions(effectiveStatus.value, props.round?.result))
 
 const nowStr = () => dayjs().format('YYYY-MM-DDTHH:mm:ss')
 const DEFAULT_DURATION_MINUTES = 72 * 60 // 默认持续 72 小时

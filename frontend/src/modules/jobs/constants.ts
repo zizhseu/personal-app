@@ -45,6 +45,9 @@ export const ROUND_TYPE_STATUS: Record<RoundType, ApplicationStatus | null> = {
   third: 'interviewing',
   hr: 'interviewing',
   final: 'interviewing',
+  verbal_offer: 'offer',
+  formal_offer: 'offer',
+  tripartite: 'offer',
   other: 'rescreen',
 }
 
@@ -87,6 +90,9 @@ export const ROUND_TYPE_LABELS: Record<RoundType, string> = {
   third: '三面',
   hr: 'HR面',
   final: '终面',
+  verbal_offer: '口头 Offer',
+  formal_offer: '正式 Offer',
+  tripartite: '三方',
   other: '其他',
 }
 
