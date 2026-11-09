@@ -528,6 +528,16 @@ AI 查阅官方文档，区分 LangChain 的模型、工具及 Agent 抽象与 L
 
 自建方向由用户确定，LangGraph 及 LangChain 的具体采用方式为 AI 建议，当前为方案讨论。依赖与源码核对、官方资料比较及设计记录由 AI 辅助完成，实际集成效果待实现后验证。设计进展见 [邮箱自动化讨论稿](agent-workbench-design.md)。
 
+**LangChain 是否支持循环，2026-11-09**
+
+用户原话
+
+> langchain支持loop嘛？
+
+AI 查阅当前官方文档，说明 `create_agent` 直接提供模型与工具间的循环。模型可以根据上一轮工具结果决定下一次工具调用，通常以最终答复或配置的执行限制结束。LangGraph 可将业务循环的节点、回跳条件、人工等待及恢复位置显式定义，定时扫描与批量遍历则由任务服务组织。
+
+针对邮箱候选场景，循环可表现为查询投递、读取岗位历史、补充匹配依据和提交受控更新。当前项目共享模型入口以文本输入输出为主，采用 Agent 循环时需要验证模型与适配层的工具调用支持、执行预算及写入幂等。用户提出能力追问，概念解释和来源核对由 AI 完成，当前为方案讨论。来源见 [官方 Agent 说明](https://docs.langchain.com/oss/python/langchain/agents)和 [工作流模式](https://docs.langchain.com/oss/python/langgraph/workflows-agents)。
+
 ## Q010：初筛为什么会出现在日程里？
 
 记录日期：2026-11-02（北京时间）。

@@ -150,6 +150,10 @@ flowchart LR
 
 LangChain 提供模型接口、工具与 Agent 抽象，也提供模型相关的结构化输出策略。其 Agent 以 LangGraph 为底层运行时。LangGraph 提供显式状态图、持久化检查点、分支、中断与故障恢复等编排能力，可以将普通 Python 函数作为节点。当前的 `llm_chat` 可作为候选模型节点，LangChain 模型与工具适配按收益和兼容性评估。
 
+LangChain 的 `create_agent` 内置 Agent 循环，模型选择工具、执行工具并将工具结果交回模型，重复运行至产出最终答复或达到配置的执行限制。邮箱场景可以先查询候选投递，再根据查询结果读取岗位历史，获得依据后调用受控更新工具。LangGraph 可显式定义提取、校验、回跳、等待关联及恢复位置，两种方式的控制粒度不同。
+
+定时收件与逐封遍历由后端任务服务组织，Agent 循环处理单次任务中的工具选择。若采用 LangChain Agent，需要具备工具调用能力的模型适配。当前 `llm_chat` 的调用输入与返回以文本消息为主，接入时需核对工具定义、`tool_calls` 或相应 Responses 事件的传递与执行，并设置调用预算、超时和写入幂等边界。
+
 邮件流程中的候选分支如下。
 
 - 明确识别并匹配投递后，进入规则校验与业务写入。
@@ -204,3 +208,4 @@ AI 从候选招聘邮件中提取公司、岗位、事件类型、轮次、结�
 - [阿里云网易邮箱连接说明](https://help.aliyun.com/zh/model-studio/connector/netease-mail)说明 163 的 IMAP 服务启用及客户端授权码接入步骤，并链接网易官方帮助。本轮网易官方帮助页面未能打开。
 - [华为官方 163 授权码说明](https://consumer.huawei.com/cn/support/content/zh-cn15872099/)提供网页版开启 IMAP 和获取授权码的步骤。[华为云邮件配置资料](https://support.huaweicloud.com/faq-welink/faq-welink.pdf)列出个人 163 的 IMAP 主机、SSL/TLS 和 993 端口。
 - 框架职责依据 [LangChain 概览](https://docs.langchain.com/oss/python/langchain/overview)、[结构化输出](https://docs.langchain.com/oss/python/langchain/structured-output)与 [LangGraph 概览](https://docs.langchain.com/oss/python/langgraph/overview)。恢复和重试方案参照 [持久化](https://docs.langchain.com/oss/python/langgraph/persistence)、[中断](https://docs.langchain.com/oss/python/langgraph/interrupts)与 [容错及幂等边界](https://docs.langchain.com/oss/python/langgraph/fault-tolerance)。
+- 循环与控制方式参照 [LangChain Agent 循环](https://docs.langchain.com/oss/python/langchain/agents)和 [工作流与 Agent 模式](https://docs.langchain.com/oss/python/langgraph/workflows-agents)。
