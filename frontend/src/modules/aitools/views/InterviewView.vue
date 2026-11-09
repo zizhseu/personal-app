@@ -2,7 +2,7 @@
   <div class="page">
     <div class="page-head">
       <div>
-        <h1>AI 面试</h1>
+        <h1>模拟面试</h1>
         <p class="sub">围绕简历中的项目与经历提问，根据回答逐步深入</p>
       </div>
       <div class="actions">
@@ -19,7 +19,7 @@
     <div class="interview-grid">
       <section class="workspace" aria-label="面试工作区">
         <el-card v-if="!activeId" shadow="never" class="setup-card">
-          <template #header><span class="section-title">准备一次简历面试</span></template>
+          <template #header><span class="section-title">准备一次模拟面试</span></template>
           <el-form label-position="top" @submit.prevent="startInterview">
             <el-form-item label="面试使用的简历">
               <div class="resume-picker">

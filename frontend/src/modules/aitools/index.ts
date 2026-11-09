@@ -12,7 +12,7 @@ export const aitoolsModule: AppModule = {
       path: '/aitools/interview',
       name: 'aitools-interview',
       component: () => import('./views/InterviewView.vue'),
-      meta: { title: 'AI 面试', icon: Microphone },
+      meta: { title: '模拟面试', icon: Microphone },
     },
     ...experiencesModule.routes,
   ] as RouteRecordRaw[],

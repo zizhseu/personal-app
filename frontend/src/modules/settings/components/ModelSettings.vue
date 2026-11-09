@@ -1,7 +1,7 @@
 <template>
   <el-card v-loading="loading" shadow="never" class="model-card">
     <div class="model-heading">
-      <div><h2>大模型</h2><p>选择 AI 面试与题目解析使用的模型，保存后立即生效。</p></div>
+      <div><h2>大模型</h2><p>选择模拟面试与题目解析使用的模型，保存后立即生效。</p></div>
       <el-tag v-if="saved" :type="saved.llmReady ? 'success' : 'info'" effect="light">{{ saved.llmReady ? '已配置' : '待配置' }}</el-tag>
     </div>
     <el-alert v-if="loadFailed" type="error" :closable="false" title="模型设置读取失败">
@@ -91,7 +91,7 @@
         <aside class="model-aside">
           <div class="aside-icon"><el-icon><Connection /></el-icon></div>
           <h3>一处配置，统一使用</h3>
-          <p>AI 面试、回答追问、复盘和选择题解析使用这里保存的连接。</p>
+          <p>模拟面试、回答追问、复盘和选择题解析使用这里保存的连接。</p>
           <div class="current-model"><span>当前已保存</span><strong>{{ saved.authMode === 'chatgpt' ? 'ChatGPT 账号' : providerName(saved.api.provider) }}</strong><code>{{ saved.model || '尚未选择模型' }}</code></div>
           <template v-if="authMode === 'chatgpt'"><h4>账号与 API Key 是两种接入</h4><p>ChatGPT 账号需要单独登录授权。OpenAI API 则填写平台生成的 API Key，按 API 的计费与权限调用。</p><a href="https://developers.openai.com/siwc/token-sharing-open-source" target="_blank" rel="noopener noreferrer">查看官方账号接入说明 ↗</a></template>
           <template v-else><h4>支持已有兼容服务</h4><p>可以填写云端服务地址，也可以连接你自己运行的本地服务。更换地址时请重新填写对应的密钥。</p></template>
