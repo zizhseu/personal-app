@@ -149,7 +149,7 @@ const editingRound = ref<InterviewRound | null>(null)
 const roundTarget = ref<RoundTarget | null>(null)
 const deletingPositionKey = ref<string | null>(null)
 const selectingPrimaryKey = ref<string | null>(null)
-onMounted(() => store.ensureLoaded())
+watch(() => route.params.id, () => { void store.loadAll() }, { immediate: true })
 const app = computed(() => store.applications.find(row => row.id === Number(route.params.id)))
 const hasActivePosition = computed(() => !!app.value && hasCurrentPosition(app.value))
 const positionGroups = computed(() => app.value ? groupPositionHistory(app.value) : [])
@@ -161,7 +161,8 @@ watch(positionGroups, (groups, previousGroups) => {
   if (expandedApplicationId !== app.value?.id) {
     // 新打开详情时优先展开主要岗位；同一详情内的刷新保留用户的展开选择。
     expandedApplicationId = app.value?.id
-    const initial = groups.find(group => group.isPrimary) ?? groups.find(group => group.isCurrent) ?? groups[0]
+    const initial = groups.find(group => group.positionVersion === Number(route.query.positionVersion))
+      ?? groups.find(group => group.isPrimary) ?? groups.find(group => group.isCurrent) ?? groups[0]
     expandedPositions.value = new Set(initial ? [initial.key] : [])
     return
   }
@@ -174,6 +175,11 @@ watch(positionGroups, (groups, previousGroups) => {
   if (!expanded.size && !groups.some(group => group.isCurrent) && groups[0]) expanded.add(groups[0].key)
   expandedPositions.value = expanded
 }, { immediate: true })
+
+watch(() => route.query.positionVersion, () => {
+  const requested = positionGroups.value.filter(group => group.positionVersion === Number(route.query.positionVersion))
+  if (requested.length) expandedPositions.value = new Set([...expandedPositions.value, ...requested.map(group => group.key)])
+})
 
 function togglePosition(key: string) {
   const next = new Set(expandedPositions.value)

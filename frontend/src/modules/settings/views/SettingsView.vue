@@ -9,6 +9,7 @@
 
     <ModelSettings />
     <SourceSettings />
+    <MailSettings />
 
     <el-card shadow="never" class="block-card">
       <h2 class="preferences-title">应用偏好</h2>
@@ -47,6 +48,7 @@ import { computed } from 'vue'
 import { useSettingsStore } from '../store'
 import ModelSettings from '../components/ModelSettings.vue'
 import SourceSettings from '@/modules/experiences/components/SourceSettings.vue'
+import MailSettings from '@/modules/mailbox/components/MailSettings.vue'
 
 const store = useSettingsStore()
 

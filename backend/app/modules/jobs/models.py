@@ -16,6 +16,7 @@ class Application(Base, TimestampMixin):
     company: Mapped[str] = mapped_column(String(100))
     position: Mapped[str | None] = mapped_column(String(100))  # 岗位（选填）
     position_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    position_version_counter: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     primary_position: Mapped[str | None] = mapped_column(String(100))
     primary_position_version: Mapped[int | None] = mapped_column(Integer)
     url: Mapped[str | None] = mapped_column(String(500))          # 招聘页面链接（点击跳转）

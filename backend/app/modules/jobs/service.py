@@ -151,6 +151,36 @@ def create_application(db: Session, data: ApplicationCreate) -> Application:
     return row
 
 
+def allocate_position_version(db: Session, row: Application) -> int:
+    previous = row.position_version_counter
+    version = max(previous, row.position_version, *(key[0] for key in position_groups(row))) + 1
+    changed = db.execute(update(Application).where(Application.id == row.id,
+        Application.position_version == row.position_version, Application.position_version_counter == previous)
+        .values(position_version_counter=version))
+    if changed.rowcount != 1:
+        raise HTTPException(409, "岗位记录已变更，请刷新后重试")
+    row.position_version_counter = version
+    return version
+
+
+def create_position(db: Session, app_id: int, position: str, status: str, *, commit: bool = True) -> StatusHistory:
+    """在公司下新增独立岗位流程，保留当前岗位和主要岗位的选择。"""
+    row = get_application(db, app_id)
+    name = recorded_position(position)
+    if not name or len(name) > 100:
+        raise HTTPException(422, "请填写 1 至 100 字的岗位名称")
+    if any(recorded_position(existing) == name for _, existing in position_groups(row)):
+        raise HTTPException(409, "该岗位已经存在，请选择已有岗位流程")
+    stage = StatusHistory(position=name, position_version=allocate_position_version(db, row),
+                          status=status, changed_at=datetime.now())
+    row.status_history.append(stage)
+    row.updated_at = datetime.now()
+    db.flush()
+    if commit:
+        db.commit()
+    return stage
+
+
 def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> Application:
     row = get_application(db, app_id)
     updates = data.model_dump(exclude_unset=True)
@@ -165,13 +195,7 @@ def update_application(db: Session, app_id: int, data: ApplicationUpdate) -> App
     when = datetime.now()
     old_status = row.status  # 先取旧状态（setattr 会覆盖）
     if new_position_period:
-        previous_version = row.position_version
-        result = db.execute(update(Application).where(Application.id == row.id,
-            Application.position_version == previous_version).values(position_version=previous_version + 1))
-        if result.rowcount != 1:
-            db.rollback()
-            raise HTTPException(409, "岗位已变更，请刷新记录后重试")
-        row.position_version = previous_version + 1
+        row.position_version = allocate_position_version(db, row)
         row.offer_decision = None
     if restart:
         updates["status"] = "screening"
@@ -203,7 +227,8 @@ def patch_status(db: Session, app_id: int, data: ApplicationStatusPatch) -> Appl
     return row
 
 
-def patch_position_status(db: Session, app_id: int, data: PositionStatusPatch) -> Application:
+def patch_position_status(db: Session, app_id: int, data: PositionStatusPatch, *,
+                          commit: bool = True, sync_round_results: bool = True) -> Application:
     """每个岗位独立追加状态，主要岗位选择不参与写入目标判断。"""
     get_application(db, app_id)
     try:
@@ -239,8 +264,12 @@ def patch_position_status(db: Session, app_id: int, data: PositionStatusPatch) -
             if summary['isCurrent']:
                 row.status = data.status
             db.flush()
-            _sync_rounds_on_status_change(db, row, summary['status'], data.status, stage, when, rounds=group.rounds)
-        db.commit()
+            if sync_round_results:
+                _sync_rounds_on_status_change(db, row, summary['status'], data.status, stage, when, rounds=group.rounds)
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         db.expire_all()
         return get_application(db, app_id)
     except Exception:
@@ -368,8 +397,7 @@ def delete_position(db: Session, app_id: int, data: PositionDeleteInput) -> Appl
     if row.primary_position_version == key[0] and recorded_position(row.primary_position) == key[1]:
         values.update(primary_position=None, primary_position_version=None)
     if is_current:
-        versions = [row.position_version, *(version for version, _ in groups)]
-        values.update(position=None, position_version=max(versions) + 1, status="screening", offer_decision=None)
+        values.update(position=None, position_version=allocate_position_version(db, row), status="screening", offer_decision=None)
     changed = db.execute(update(Application).where(Application.id == app_id,
         Application.position_version == data.expected_position_version).values(**values))
     if changed.rowcount != 1:
@@ -406,7 +434,7 @@ def _check_round_type_status(round_type: str, app_status: str | None) -> None:
         )
 
 
-def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
+def create_round(db: Session, app_id: int, data: RoundCreate, *, commit: bool = True) -> InterviewRound:
     app_row = get_application(db, app_id)  # 确认父记录存在
     if data.expected_position_version is not None and data.expected_position_version != app_row.position_version:
         raise HTTPException(409, "当前岗位已变更，请刷新后确认所属岗位再添加")
@@ -452,7 +480,10 @@ def create_round(db: Session, app_id: int, data: RoundCreate) -> InterviewRound:
     # 创建即有结果：记一条初始结果变化（from 为空）
     if result_changed_at is not None:
         _record_result(db, row, stage, None, when)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(row)
     return row
 
@@ -464,7 +495,7 @@ def get_round(db: Session, round_id: int) -> InterviewRound:
     return row
 
 
-def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRound:
+def update_round(db: Session, round_id: int, data: RoundUpdate, *, commit: bool = True) -> InterviewRound:
     row = get_round(db, round_id)
     updates = data.model_dump(exclude_unset=True)
     # 改轮次类型时同样校验状态匹配
@@ -496,7 +527,10 @@ def update_round(db: Session, round_id: int, data: RoundUpdate) -> InterviewRoun
         row.result_changed_at = when
         stage = _round_stage(db, row, app_row, when) if app_row else None
         _record_result(db, row, stage, old_result, when)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(row)
     return row
 

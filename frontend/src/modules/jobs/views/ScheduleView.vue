@@ -69,7 +69,7 @@ onMounted(async () => {
   clockTimer = setInterval(() => {
     now.value = Date.now()
   }, 60_000)
-  await store.ensureLoaded()
+  await store.loadAll()
 })
 onBeforeUnmount(() => {
   if (clockTimer !== undefined) clearInterval(clockTimer)

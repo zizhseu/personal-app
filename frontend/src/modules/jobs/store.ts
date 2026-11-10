@@ -23,22 +23,26 @@ export const useJobsStore = defineStore('jobs', {
     events: [] as ScheduleEvent[],
     loaded: false,
     loading: false,
+    loadVersion: 0,
     savingPrimaryIds: [] as number[],
     savingPositionStatusKeys: [] as string[],
   }),
   actions: {
     async loadAll() {
+      const version = (this.loadVersion ?? 0) + 1
+      this.loadVersion = version
       this.loading = true
       try {
         const [applications, events] = await Promise.all([
           api.fetchApplications(),
           api.fetchEvents(),
         ])
+        if (version !== this.loadVersion) return
         this.applications = applications
         this.events = events
         this.loaded = true
       } finally {
-        this.loading = false
+        if (version === this.loadVersion) this.loading = false
       }
     },
     /** 确保数据已加载（刷新详情页 URL 直开时兜底） */

@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { Microphone } from '@element-plus/icons-vue'
+import { Message, Microphone } from '@element-plus/icons-vue'
 import type { AppModule } from '@/shared/types/module'
 import { experiencesModule } from '../experiences'
 
@@ -15,5 +15,11 @@ export const aitoolsModule: AppModule = {
       meta: { title: '模拟面试', icon: Microphone },
     },
     ...experiencesModule.routes,
+    {
+      path: '/aitools/mailbox',
+      name: 'aitools-mailbox',
+      component: () => import('../mailbox/views/MailboxView.vue'),
+      meta: { title: '邮件同步', icon: Message },
+    },
   ] as RouteRecordRaw[],
 }

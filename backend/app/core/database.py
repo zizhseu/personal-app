@@ -79,6 +79,17 @@ def init_db() -> None:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN status_history_id INTEGER REFERENCES status_history(id) ON DELETE SET NULL"))
         conn.commit()
 
+        # 新岗位可独立于当前岗位创建，分配计数器保留已用代次，删除后也不复用。
+        application_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(application)"))}
+        if "position_version_counter" not in application_cols:
+            conn.execute(text("ALTER TABLE application ADD COLUMN position_version_counter INTEGER NOT NULL DEFAULT 1"))
+        conn.execute(text("""UPDATE application SET position_version_counter = MAX(
+            position_version_counter, position_version,
+            COALESCE((SELECT MAX(position_version) FROM interview_round WHERE application_id = application.id), 1),
+            COALESCE((SELECT MAX(position_version) FROM status_history WHERE application_id = application.id), 1),
+            COALESCE((SELECT MAX(position_version) FROM round_result_history WHERE application_id = application.id), 1))"""))
+        conn.commit()
+
         # 地点字段已并入 Base：老数据的 location 按分隔符拆分迁入 base（仅处理 base 为空的行）
         import json as _json
         import re as _re

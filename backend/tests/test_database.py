@@ -41,6 +41,25 @@ class DatabaseInitializationTests(unittest.TestCase):
             created_at = connection.scalar(text("SELECT created_at FROM qa_category LIMIT 1"))
             self.assertLess(abs((datetime.now() - datetime.fromisoformat(created_at)).total_seconds()), 5)
 
+    def test_legacy_position_counter_migrates_to_highest_used_version(self):
+        Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            connection.execute(text("ALTER TABLE application DROP COLUMN position_version_counter"))
+            connection.execute(text("INSERT INTO application (id,company,position,position_version,status,created_at,updated_at) VALUES (1,'迁移示例','当前岗位',3,'screening',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+            connection.execute(text("INSERT INTO status_history (application_id,position,position_version,status,changed_at,created_at,updated_at) VALUES (1,'独立岗位',7,'rescreen',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+        database.init_db()
+        with self.engine.connect() as connection:
+            self.assertEqual(connection.scalar(text("SELECT position_version_counter FROM application WHERE id=1")), 7)
+            self.assertEqual(connection.scalar(text("SELECT position_version FROM application WHERE id=1")), 3)
+
+    def test_position_counter_survives_removal_of_highest_historical_version(self):
+        database.init_db()
+        with self.engine.begin() as connection:
+            connection.execute(text("INSERT INTO application (id,company,position,position_version,position_version_counter,status,created_at,updated_at) VALUES (1,'计数器示例','当前岗位',3,9,'screening',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+        database.init_db()
+        with self.engine.connect() as connection:
+            self.assertEqual(connection.scalar(text("SELECT position_version_counter FROM application WHERE id=1")), 9)
+
     def test_seeding_after_timezone_migration_uses_local_timestamps(self):
         database.init_db()
         with self.engine.begin() as connection:

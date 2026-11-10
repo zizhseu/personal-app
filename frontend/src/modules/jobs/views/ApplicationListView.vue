@@ -240,7 +240,7 @@ const editing = ref<Application | null>(null)
 /** Base 浮层里的自定义城市输入 */
 const newCity = ref('')
 
-onMounted(() => store.ensureLoaded())
+onMounted(() => store.loadAll())
 
 /** 常驻选项 + 已选的自定义城市（保证已选项可取消） */
 function baseCheckboxOptions(row: ListRow): string[] {

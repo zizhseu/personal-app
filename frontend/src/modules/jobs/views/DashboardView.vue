@@ -83,7 +83,7 @@ use([CanvasRenderer, PieChart, BarChart, TooltipComponent, LegendComponent, Grid
 const store = useJobsStore()
 const activeApplications = computed(() => store.applications.map(primaryApplication).filter(hasCurrentPosition))
 
-onMounted(() => store.ensureLoaded())
+onMounted(() => store.loadAll())
 
 // ---------- 趋势图时间段 ----------
 const dateRange = ref<[string, string]>([
