@@ -178,7 +178,7 @@ def _same_arrangement(round_row, proposal):
 def apply_event(db: Session, message_id: int, target: dict, *, token: str | None = None,
                 manual: bool = False, selected_round_id: int | None = None) -> MailMessage:
     message = db.get(MailMessage, message_id)
-    if message is None:
+    if message is None or message.deleted_at is not None:
         raise HTTPException(404, "邮件记录不存在")
     if message.status in ("applied", "unchanged"):
         return message
@@ -191,6 +191,11 @@ def apply_event(db: Session, message_id: int, target: dict, *, token: str | None
                         .values(updated_at=MailAccount.updated_at))
     if locked.rowcount != 1:
         raise HTTPException(409, "邮箱正在由其他任务处理，请稍后重试")
+    db.refresh(message)
+    if message.deleted_at is not None:
+        raise HTTPException(404, "邮件记录不存在")
+    if message.status != expected_state or (not manual and message.processing_token != token):
+        raise HTTPException(409, "邮件处理状态已变化，请刷新后重试")
     proposal = MailProposal.model_validate(message.proposal)
     if proposal.category != "event" or proposal.event_type == "application_received":
         raise ReviewRequired("该邮件没有可提交的流程变化")

@@ -33,7 +33,10 @@
         <el-table-column label="收到时间" width="160"><template #default="{ row }">{{ formatDateTime(row.receivedAt) }}</template></el-table-column>
         <el-table-column label="处理状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)">{{ statusLabels[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="判断依据与变更" min-width="240" show-overflow-tooltip><template #default="{ row }">{{ row.changeSummary || row.reason || '等待处理' }}</template></el-table-column>
-        <el-table-column width="85"><template #default="{ row }"><el-button text type="primary" @click.stop="openMessage(row)">查看</el-button></template></el-table-column>
+        <el-table-column label="操作" width="150"><template #default="{ row }">
+          <el-button text type="primary" :disabled="acting || deletingId !== null" @click.stop="openMessage(row)">查看</el-button>
+          <el-button text type="danger" :loading="deletingId === row.id" :disabled="account?.scanning || acting || deletingId !== null" :title="account?.scanning ? '本次扫描结束后可删除' : '删除处理记录'" @click.stop="removeMessage(row)">删除</el-button>
+        </template></el-table-column>
       </el-table>
       <el-pagination v-if="total > 30" v-model:current-page="view.state.page" :page-size="30" :total="total" layout="prev, pager, next, total" class="pagination" />
     </el-card>
@@ -66,7 +69,7 @@
         </template>
         <div v-if="canApply" class="association">
           <h4>核对并关联岗位</h4>
-          <el-button text type="primary" @click="refreshTargets">刷新岗位信息</el-button>
+          <el-button text type="primary" :disabled="acting || deletingId !== null" @click="refreshTargets">刷新岗位信息</el-button>
           <el-radio-group v-model="creatingPosition" aria-label="邮件岗位处理方式">
             <el-radio-button :value="false">更新已有岗位</el-radio-button>
             <el-radio-button v-if="!requiresRound" :value="true">在公司下新增岗位</el-radio-button>
@@ -86,7 +89,7 @@
             <el-option v-for="round in eligibleRounds" :key="round.id" :value="round.id" :label="`${ROUND_TYPE_LABELS[round.roundType]} #${round.id} · ${formatDateTime(round.startAt)} · ${RESULT_LABELS[round.result]}`" />
           </el-select>
           <p class="muted">请对照原文核对时间与轮次，确认后提交上方事件。重复邀请可直接忽略。</p>
-          <el-button type="primary" :loading="acting" :disabled="creatingPosition ? !selectedCompany || !newPosition.trim() : !selectedTarget || (requiresRound && !roundId)" @click="apply">{{ creatingPosition ? '确认新增岗位并更新流程' : '确认更新此岗位' }}</el-button>
+          <el-button type="primary" :loading="acting" :disabled="deletingId !== null || (creatingPosition ? !selectedCompany || !newPosition.trim() : !selectedTarget || (requiresRound && !roundId))" @click="apply">{{ creatingPosition ? '确认新增岗位并更新流程' : '确认更新此岗位' }}</el-button>
         </div>
         <p v-if="detail.changes && detail.changes.before.status !== detail.changes.after.status">岗位阶段 {{ STATUS_LABELS[detail.changes.before.status] || detail.changes.before.status }} → {{ STATUS_LABELS[detail.changes.after.status] || detail.changes.after.status }}</p>
         <p v-if="detail.applicationId"><RouterLink :to="{ path: `/jobs/applications/${detail.applicationId}`, query: detail.changes?.after.round?.positionVersion ? { positionVersion: String(detail.changes.after.round.positionVersion) } : {} }" @click="detailVisible = false">查看本次更新的岗位流程</RouterLink></p>
@@ -96,8 +99,9 @@
       </div>
       <template #footer>
         <div class="dialog-actions">
-          <el-button v-if="detail && ['review', 'failed'].includes(detail.status)" :disabled="acting" @click="ignore">忽略此邮件</el-button>
-          <el-button v-if="detail && !['applied', 'unchanged', 'pending', 'analyzing'].includes(detail.status)" :disabled="account?.scanning" :loading="acting" @click="retry">重新分析</el-button>
+          <el-button v-if="detail" type="danger" plain :disabled="account?.scanning || acting || deletingId !== null" :loading="deletingId === detail.id" :title="account?.scanning ? '本次扫描结束后可删除' : '删除处理记录'" @click="removeMessage(detail)">删除记录</el-button>
+          <el-button v-if="detail && ['review', 'failed'].includes(detail.status)" :disabled="acting || deletingId !== null" @click="ignore">忽略此邮件</el-button>
+          <el-button v-if="detail && !['applied', 'unchanged', 'pending', 'analyzing'].includes(detail.status)" :disabled="account?.scanning || deletingId !== null" :loading="acting" @click="retry">重新分析</el-button>
           <el-button @click="detailVisible = false">关闭</el-button>
         </div>
       </template>
@@ -107,7 +111,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ROUND_TYPE_LABELS, RESULT_LABELS, STATUS_LABELS } from '@/modules/jobs/constants'
 import { formatDateTime } from '@/shared/utils/format'
 import { useJobsStore } from '@/modules/jobs/store'
@@ -121,6 +125,7 @@ const jobs = useJobsStore()
 const account = ref<MailAccount | null>(null), items = ref<MailMessage[]>([])
 const counts = ref<Record<string, number>>({}), total = ref(0)
 const loading = ref(false), loaded = ref(false), loadFailed = ref(false), starting = ref(false), acting = ref(false)
+const deletingId = ref<number | null>(null)
 const detailVisible = ref(false), detail = ref<MailMessage | null>(null), targets = ref<MailTarget[]>([])
 const targetIndex = ref<number | null>(null), roundId = ref(0)
 const companies = ref<MailCompanyTarget[]>([]), companyIndex = ref<number | null>(null)
@@ -135,6 +140,7 @@ const requiresRound = computed(() => ['result', 'reschedule'].includes(detail.va
 const canApply = computed(() => detail.value?.status === 'review' && detail.value.proposal?.category === 'event' && detail.value.proposal.eventType !== 'application_received')
 let timer: ReturnType<typeof setInterval> | undefined
 let requestVersion = 0
+let detailRequestVersion = 0
 
 function tagType(status: string): 'success' | 'warning' | 'danger' | 'info' {
   return status === 'applied' ? 'success' : status === 'review' ? 'warning' : status === 'failed' ? 'danger' : 'info'
@@ -158,8 +164,11 @@ async function scan() {
   finally { starting.value = false }
 }
 async function openMessage(message: MailMessage) {
+  if (acting.value || deletingId.value !== null) return
+  const version = ++detailRequestVersion
   try {
     const [row, choices, parents] = await Promise.all([api.getMessage(message.id), api.getTargets(), api.getCompanyTargets()])
+    if (version !== detailRequestVersion) return
     detail.value = row; targets.value = choices; companies.value = parents; targetIndex.value = null; roundId.value = 0
     companyIndex.value = null
     creatingPosition.value = row.proposal?.positionAction === 'create'
@@ -168,6 +177,21 @@ async function openMessage(message: MailMessage) {
     if (candidates.length === 1) companyIndex.value = candidates[0]!.index
     detailVisible.value = true
   } catch { /* 请求错误由统一入口显示。 */ }
+}
+async function removeMessage(message: MailMessage) {
+  if (acting.value || deletingId.value !== null || account.value?.scanning) return
+  deletingId.value = message.id
+  detailRequestVersion++
+  try {
+    await ElMessageBox.confirm(`确定删除「${message.subject}」的处理记录吗？已同步的岗位流程将保留。`, '删除处理记录', {
+      type: 'warning', confirmButtonText: '删除记录', cancelButtonText: '取消',
+    })
+    await api.deleteMessage(message.id)
+    if (detail.value?.id === message.id) { detailVisible.value = false; detail.value = null }
+    ElMessage.success('已删除处理记录')
+    await load(true)
+  } catch { /* 取消时保留记录，请求错误由统一入口显示。 */ }
+  finally { deletingId.value = null }
 }
 async function apply() {
   if (!detail.value) return
@@ -208,7 +232,7 @@ async function retry() {
 }
 watch(() => [view.state.status, view.state.page], () => { void load() })
 onMounted(() => { void load(); timer = setInterval(() => { if (!document.hidden) void load(true) }, 5000) })
-onBeforeUnmount(() => { requestVersion++; clearInterval(timer) })
+onBeforeUnmount(() => { requestVersion++; detailRequestVersion++; clearInterval(timer) })
 </script>
 
 <style scoped>

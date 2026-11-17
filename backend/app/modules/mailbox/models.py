@@ -88,6 +88,7 @@ class MailMessage(Base, TimestampMixin):
     application_id: Mapped[int | None] = mapped_column(ForeignKey("application.id", ondelete="SET NULL"))
     round_id: Mapped[int | None] = mapped_column(ForeignKey("interview_round.id", ondelete="SET NULL"))
     changes: Mapped[dict | None] = mapped_column(JSON)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     def to_dict(self, *, detail=False):
         result = {

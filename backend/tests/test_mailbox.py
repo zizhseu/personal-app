@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import FastAPI, HTTPException
 import httpx
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -636,6 +636,114 @@ class MailboxTests(unittest.TestCase):
             async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
                 return await client.request(method, path, **kwargs)
         return asyncio.run(send())
+
+    def test_deleting_applied_record_hides_it_and_preserves_business_and_dedup(self):
+        row = self.process(self.message())
+        before = jobs.get_application(self.db, self.application.id).to_dict()
+        event_key, fingerprint = row.event_key, row.fingerprint
+        self.account.scan_token, self.account.lease_until = None, None
+        self.db.commit()
+        response = self.request("DELETE", f"/api/mailbox/messages/{row.id}")
+        self.assertEqual(response.status_code, 204, response.text)
+        self.assertFalse(response.content)
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 204)
+        self.assertEqual(self.request("GET", f"/api/mailbox/messages/{row.id}").status_code, 404)
+        listing = self.request("GET", "/api/mailbox/messages").json()
+        self.assertEqual(listing, {"items": [], "total": 0, "counts": {}})
+        self.assertEqual(self.request("GET", "/api/mailbox/messages?status=applied").json()["total"], 0)
+        self.db.expire_all()
+        saved = self.db.get(MailMessage, row.id)
+        self.assertIsNotNone(saved.deleted_at)
+        self.assertEqual((saved.event_key, saved.fingerprint, saved.status), (event_key, fingerprint, "applied"))
+        self.assertEqual(jobs.get_application(self.db, self.application.id).to_dict(), before)
+
+    def test_deleted_record_cannot_be_applied_ignored_or_retried(self):
+        row = self.process(self.message(), self.proposal(startAt=None, startEvidence=None))
+        target = execution.targets(self.db)[0]
+        payload = {key: target[key] for key in ("applicationId", "positionVersion", "position", "expectedUpdatedAt", "expectedSnapshot")}
+        self.account.scan_token, self.account.lease_until = None, None
+        self.db.commit()
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 204)
+        for action in ("apply", "ignore", "retry"):
+            response = self.request("POST", f"/api/mailbox/messages/{row.id}/{action}", json=payload if action == "apply" else None)
+            self.assertEqual(response.status_code, 404, response.text)
+
+    def test_delete_blocks_live_scan_and_revokes_expired_task(self):
+        row = self.message()
+        response = self.request("DELETE", f"/api/mailbox/messages/{row.id}")
+        self.assertEqual(response.status_code, 409)
+        self.db.refresh(row)
+        self.assertIsNone(row.deleted_at)
+        self.account.lease_until = datetime.now() - timedelta(seconds=1)
+        self.db.commit()
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 204)
+        with self.assertRaises(HTTPException):
+            service.renew_lease(self.db, self.account.id, self.token)
+
+    def test_deleted_pending_record_is_skipped_by_scan(self):
+        row = self.message()
+        self.account.scan_token, self.account.lease_until = None, None
+        self.db.commit()
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 204)
+        token = service.claim_scan(self.db, self.account.id)
+        with patch.object(analysis.model_service, "llm_chat", new=AsyncMock()) as model:
+            asyncio.run(service.run_scan(self.account.id, token, fetch=False, session_factory=self.factory))
+            asyncio.run(service.analyze_message(self.db, row.id, token))
+        model.assert_not_awaited()
+        self.db.refresh(row)
+        self.assertIsNotNone(row.deleted_at)
+        self.assertEqual(row.status, "pending")
+
+    def test_deleted_source_still_deduplicates_repeated_mail_and_event(self):
+        row = self.process(self.message())
+        original_round_id = row.round_id
+        self.account.scan_token, self.account.lease_until = None, None
+        self.db.commit()
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 204)
+        self.token = service.claim_scan(self.db, self.account.id)
+        raw = EmailMessage()
+        raw["From"], raw["Subject"] = row.sender, row.subject
+        raw.set_content(self.body)
+        payload = imap_client.parse_mail(raw.as_bytes(), row.uid, datetime.now())
+        service.store_batch(self.db, self.account.id, self.token,
+            {"validity": "7", "last_uid": 11, "messages": [payload], "reset": False})
+        self.assertEqual(len(list(self.db.scalars(select(MailMessage)))), 1)
+        payload = {**payload, "uid": 12}
+        service.store_batch(self.db, self.account.id, self.token,
+            {"validity": "7", "last_uid": 12, "messages": [payload], "reset": False})
+        copied = self.db.scalar(select(MailMessage).where(MailMessage.uid == 12))
+        self.assertEqual((copied.status, copied.duplicate_of), ("duplicate", row.id))
+        body = self.body + "请及时确认。"
+        repeated = self.process(self.message(body=body, uid=13), self.proposal(evidence=body))
+        self.assertEqual((repeated.status, repeated.round_id), ("duplicate", original_round_id))
+        self.assertEqual(len([r for r in jobs.get_application(self.db, self.application.id).rounds if r.round_type == "first"]), 1)
+
+    def test_deletion_rejects_missing_and_other_accounts(self):
+        row = self.message()
+        other = MailAccount(address="other-test@163.com", active=False, uid_validity="7", next_scan_at=datetime.now())
+        self.db.add(other)
+        self.db.flush()
+        row.account_id = other.id
+        self.db.commit()
+        self.assertEqual(self.request("DELETE", f"/api/mailbox/messages/{row.id}").status_code, 404)
+        self.assertEqual(self.request("DELETE", "/api/mailbox/messages/999999").status_code, 404)
+        self.db.refresh(row)
+        self.assertIsNone(row.deleted_at)
+
+    def test_apply_rechecks_deleted_record_after_account_lock(self):
+        row = self.process(self.message(), self.proposal(startAt=None, startEvidence=None))
+        target = execution.targets(self.db)[0]
+        self.account.scan_token, self.account.lease_until = None, None
+        self.db.execute(update(MailMessage).where(MailMessage.id == row.id)
+            .values(deleted_at=datetime.now()).execution_options(synchronize_session=False))
+        self.db.commit()
+        # 模拟请求已读到待核对记录，随后另一请求完成删除，当前 Session 仍有旧对象。
+        self.assertIsNone(row.deleted_at)
+        with self.assertRaises(HTTPException) as error:
+            execution.apply_event(self.db, row.id, target, manual=True)
+        self.assertEqual(error.exception.status_code, 404)
+        self.db.rollback()
+        self.assertEqual(jobs.get_application(self.db, self.application.id).status, "screening")
 
     def test_api_manual_scan_is_queued_and_returns_immediately(self):
         self.account.scan_token, self.account.lease_until = None, None

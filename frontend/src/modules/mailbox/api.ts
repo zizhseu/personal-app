@@ -8,6 +8,7 @@ export const getMailStatus = (silentError = false) => request.get('/mailbox/stat
 export const scanMailbox = () => request.post('/mailbox/scan') as Promise<{ accepted: boolean }>
 export const getMessages = (status: string, page: number, silentError = false) => request.get('/mailbox/messages', { params: { status: status === 'all' ? undefined : status, page }, silentError }) as Promise<MessageList>
 export const getMessage = (id: number) => request.get(`/mailbox/messages/${id}`) as Promise<MailMessage>
+export const deleteMessage = (id: number) => request.delete(`/mailbox/messages/${id}`) as Promise<void>
 export const getTargets = () => request.get('/mailbox/targets') as Promise<MailTarget[]>
 export const getCompanyTargets = () => request.get('/mailbox/company-targets') as Promise<MailCompanyTarget[]>
 export const retryMessage = (id: number) => request.post(`/mailbox/messages/${id}/retry`) as Promise<{ accepted: boolean }>

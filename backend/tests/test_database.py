@@ -69,6 +69,21 @@ class DatabaseInitializationTests(unittest.TestCase):
             created_at = connection.scalar(text("SELECT created_at FROM qa_category LIMIT 1"))
             self.assertLess(abs((datetime.now() - datetime.fromisoformat(created_at)).total_seconds()), 5)
 
+    def test_legacy_mail_records_gain_deletion_marker_without_changing_contents(self):
+        Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            connection.execute(text("ALTER TABLE mail_message DROP COLUMN deleted_at"))
+            connection.execute(Base.metadata.tables["mail_account"].insert().values(
+                id=1, address="migration-test@163.com", uid_validity="7", next_scan_at=datetime.now()))
+            connection.execute(Base.metadata.tables["mail_message"].insert().values(
+                id=1, account_id=1, uid_validity="7", uid=11, fingerprint="test-fingerprint",
+                subject="迁移测试", sender="test@example.invalid", body="测试正文", status="ignored", received_at=datetime.now()))
+        database.init_db()
+        database.init_db()
+        with self.engine.connect() as connection:
+            row = connection.execute(text("SELECT subject,body,status,deleted_at FROM mail_message WHERE id=1")).one()
+            self.assertEqual(tuple(row), ("迁移测试", "测试正文", "ignored", None))
+
     def test_legacy_question_rebuild_preserves_related_questions(self):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as connection:

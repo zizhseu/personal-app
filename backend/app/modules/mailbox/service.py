@@ -121,13 +121,15 @@ def store_batch(db: Session, account_id: int, token: str, batch: dict) -> None:
 def finish_message(db: Session, message_id: int, token: str, status: str, reason: str) -> None:
     owned_accounts = select(MailAccount.id).where(MailAccount.scan_token == token)
     db.execute(update(MailMessage).where(MailMessage.id == message_id, MailMessage.processing_token == token,
-                                        MailMessage.account_id.in_(owned_accounts))
+                                        MailMessage.account_id.in_(owned_accounts), MailMessage.deleted_at.is_(None))
                .values(status=status, reason=reason[:1000], processing_token=None))
     db.commit()
 
 
 async def analyze_message(db: Session, message_id: int, token: str) -> None:
-    message = db.get(MailMessage, message_id)
+    message = db.get(MailMessage, message_id, populate_existing=True)
+    if message is None or message.deleted_at is not None:
+        return
     renew_lease(db, message.account_id, token)
     message.status, message.processing_token = "analyzing", token
     db.commit()
@@ -209,11 +211,12 @@ async def run_scan(account_id: int, token: str, *, fetch: bool = True, session_f
                         validity=account.uid_validity, last_uid=account.last_uid, through_uid=upper_uid)
                     store_batch(db, account_id, token, batch)
             # 获得新租约后，恢复此前进程中断留下的处理中记录。
-            db.execute(update(MailMessage).where(MailMessage.account_id == account_id, MailMessage.status == "analyzing")
+            db.execute(update(MailMessage).where(MailMessage.account_id == account_id, MailMessage.status == "analyzing",
+                                                MailMessage.deleted_at.is_(None))
                        .values(status="pending", processing_token=None))
             db.commit()
             pending = list(db.scalars(select(MailMessage.id).where(MailMessage.account_id == account_id,
-                MailMessage.status == "pending").order_by(MailMessage.id)))
+                MailMessage.status == "pending", MailMessage.deleted_at.is_(None)).order_by(MailMessage.id)))
             for message_id in pending:
                 await analyze_message(db, message_id, token)
         except HTTPException as error:

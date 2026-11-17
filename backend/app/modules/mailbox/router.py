@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
@@ -100,12 +100,13 @@ def messages(status: str | None = None, page: int = Query(default=1, ge=1), db: 
     account = service.current_account(db)
     if account is None:
         return {"items": [], "total": 0, "counts": {}}
-    base = select(MailMessage).where(MailMessage.account_id == account.id)
+    base = select(MailMessage).where(MailMessage.account_id == account.id, MailMessage.deleted_at.is_(None))
     if status:
         base = base.where(MailMessage.status == status)
     count = db.scalar(select(func.count()).select_from(base.subquery()))
     rows = db.scalars(base.order_by(MailMessage.id.desc()).offset((page - 1) * 30).limit(30))
-    counts = dict(db.execute(select(MailMessage.status, func.count()).where(MailMessage.account_id == account.id)
+    counts = dict(db.execute(select(MailMessage.status, func.count()).where(
+                            MailMessage.account_id == account.id, MailMessage.deleted_at.is_(None))
                             .group_by(MailMessage.status)).all())
     return {"items": [row.to_dict() for row in rows], "total": count, "counts": counts}
 
@@ -128,9 +129,31 @@ def search_companies(keyword: str = Query(min_length=1, max_length=40), db: Sess
 @router.get("/messages/{message_id}")
 def message_detail(message_id: int, db: Session = Depends(get_db)):
     message = db.get(MailMessage, message_id)
-    if message is None:
+    if message is None or message.deleted_at is not None:
         raise HTTPException(404, "邮件记录不存在")
     return message.to_dict(detail=True)
+
+
+@router.delete("/messages/{message_id}", status_code=204)
+def delete_message(message_id: int, db: Session = Depends(get_db)):
+    account = service.current_account(db)
+    message = db.get(MailMessage, message_id)
+    if message is None or account is None or message.account_id != account.id:
+        raise HTTPException(404, "当前邮箱的邮件记录不存在")
+    if message.deleted_at is not None:
+        return Response(status_code=204)
+    now = datetime.now()
+    # 与扫描、重试和人工确认争用同一个账号锁，过期任务的租约一并失效。
+    locked = db.execute(update(MailAccount).where(MailAccount.id == account.id, MailAccount.active.is_(True),
+        or_(MailAccount.scan_token.is_(None), MailAccount.lease_until <= now))
+        .values(scan_token=None, lease_until=None, updated_at=MailAccount.updated_at))
+    if locked.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "邮箱正在扫描，请在本次扫描结束后删除处理记录")
+    db.execute(update(MailMessage).where(MailMessage.id == message_id, MailMessage.deleted_at.is_(None))
+               .values(deleted_at=now, processing_token=None))
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/messages/{message_id}/apply")
@@ -152,13 +175,13 @@ def apply_message(message_id: int, data: ApplyMessage, db: Session = Depends(get
 def retry_message(message_id: int, tasks: BackgroundTasks, db: Session = Depends(get_db)):
     message = db.get(MailMessage, message_id)
     account = service.current_account(db)
-    if message is None or account is None or message.account_id != account.id:
+    if message is None or message.deleted_at is not None or account is None or message.account_id != account.id:
         raise HTTPException(404, "当前邮箱的邮件记录不存在")
     if message.status in ("applied", "unchanged", "analyzing", "pending"):
         raise HTTPException(409, "该邮件已更新或正在处理，请刷新记录")
     token = service.claim_scan(db, account.id)
     db.refresh(message)
-    if message.status in ("applied", "unchanged", "analyzing", "pending"):
+    if message.deleted_at is not None or message.status in ("applied", "unchanged", "analyzing", "pending"):
         db.execute(update(MailAccount).where(MailAccount.id == account.id, MailAccount.scan_token == token)
                    .values(scan_token=None, lease_until=None))
         db.commit()
@@ -172,9 +195,9 @@ def retry_message(message_id: int, tasks: BackgroundTasks, db: Session = Depends
 @router.post("/messages/{message_id}/ignore")
 def ignore_message(message_id: int, db: Session = Depends(get_db)):
     message = db.get(MailMessage, message_id)
-    if message is None:
+    if message is None or message.deleted_at is not None:
         raise HTTPException(404, "邮件记录不存在")
-    changed = db.execute(update(MailMessage).where(MailMessage.id == message_id,
+    changed = db.execute(update(MailMessage).where(MailMessage.id == message_id, MailMessage.deleted_at.is_(None),
         MailMessage.status.in_(("review", "failed"))).values(status="ignored", reason="用户已核对并忽略"))
     if changed.rowcount != 1:
         db.rollback()

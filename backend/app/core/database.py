@@ -90,6 +90,12 @@ def init_db() -> None:
             COALESCE((SELECT MAX(position_version) FROM round_result_history WHERE application_id = application.id), 1))"""))
         conn.commit()
 
+        # 邮件处理记录逻辑删除，保留收件和事件去重依据。
+        mail_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(mail_message)"))}
+        if mail_cols and "deleted_at" not in mail_cols:
+            conn.execute(text("ALTER TABLE mail_message ADD COLUMN deleted_at DATETIME"))
+            conn.commit()
+
         # 地点字段已并入 Base：老数据的 location 按分隔符拆分迁入 base（仅处理 base 为空的行）
         import json as _json
         import re as _re
